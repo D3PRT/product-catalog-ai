@@ -1,5 +1,3 @@
-const fetch = require('node-fetch');
-
 exports.handler = async (event, context) => {
   if (event.httpMethod !== 'POST') {
     return {
@@ -18,6 +16,7 @@ exports.handler = async (event, context) => {
   }
 
   try {
+    // Use global fetch (available in Node 18+)
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -37,21 +36,4 @@ exports.handler = async (event, context) => {
     if (!response.ok) {
       return {
         statusCode: response.status,
-        body: JSON.stringify(data)
-      };
-    }
-
-    return {
-      statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(data)
-    };
-  } catch (error) {
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: error.message })
-    };
-  }
-};
+        body: JSON.s
