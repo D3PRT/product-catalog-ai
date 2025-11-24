@@ -27,7 +27,10 @@
       const [showApiKeyInput, setShowApiKeyInput] = useState(true);
       const [activeTab, setActiveTab] = useState('chat'); // chat, products, bundles, create
       const [editingItem, setEditingItem] = useState(null);
+      const [editingType, setEditingType] = useState(null); // 'product' or 'bundle'
       const [createType, setCreateType] = useState('product');
+      const [newItem, setNewItem] = useState({});
+      const [showCreateForm, setShowCreateForm] = useState(false);
       const messagesEndRef = useRef(null);
 
       const scrollToBottom = () => {
@@ -86,7 +89,7 @@
         setShowApiKeyInput(true);
       };
 
-      const callClaudeAPI = async (userPrompt) => {
+      const callClaudeAPI = async (userPrompt, useExtendedThinking = false) => {
         try {
           // Prepare data summary and full data
           let dataContext = '';
@@ -116,7 +119,31 @@
             }
           }
 
-          const context = `You are an AI assistant helping manage a product catalog. You have DIRECT ACCESS to the user's data below. Analyze it and answer their questions directly.
+          const systemPrompt = useExtendedThinking ? 
+            `You are an expert AI assistant with advanced analytical capabilities. You have DIRECT ACCESS to the user's product catalog data.
+
+REASONING APPROACH:
+When faced with complex questions:
+1. Break down the problem into steps
+2. Analyze the data systematically
+3. Show your reasoning process
+4. Provide clear, actionable insights
+5. Suggest follow-up actions if relevant
+
+For difficult questions:
+- Take time to think through the problem
+- Consider multiple angles
+- Cross-reference products and bundles
+- Calculate statistics and relationships
+- Provide evidence-based recommendations
+
+${dataContext}
+
+USER QUESTION: ${userPrompt}
+
+TASK: Use advanced reasoning to answer this question thoroughly. Show your thought process and provide detailed analysis.` 
+            : 
+            `You are an AI assistant helping manage a product catalog. You have DIRECT ACCESS to the user's data below. Analyze it and answer their questions directly.
 
 ${dataContext}
 
@@ -137,8 +164,8 @@ INSTRUCTIONS:
             },
             body: JSON.stringify({
               apiKey: apiKey,
-              messages: [{ role: "user", content: context }],
-              max_tokens: 2000
+              messages: [{ role: "user", content: systemPrompt }],
+              max_tokens: useExtendedThinking ? 4000 : 2000
             })
           });
 
@@ -170,7 +197,24 @@ INSTRUCTIONS:
         setIsLoading(true);
 
         try {
-          const response = await callClaudeAPI(userMessage);
+          // Detect if this is a complex question that needs extended thinking
+          const complexKeywords = [
+            'analyze', 'strategy', 'optimize', 'recommend', 'compare',
+            'why', 'how should', 'what if', 'best way', 'improve',
+            'insights', 'trends', 'patterns', 'evaluate', 'assess',
+            'pros and cons', 'advantages', 'disadvantages', 'trade-off',
+            'complex', 'difficult', 'challenging', 'detailed analysis'
+          ];
+          
+          const isComplex = complexKeywords.some(keyword => 
+            userMessage.toLowerCase().includes(keyword)
+          );
+
+          if (isComplex) {
+            addMessage('system', '🧠 Using extended thinking for this complex question...');
+          }
+
+          const response = await callClaudeAPI(userMessage, isComplex);
           addMessage('assistant', response);
         } catch (error) {
           console.error("Error:", error);
@@ -229,6 +273,86 @@ INSTRUCTIONS:
             setBundles(newBundles);
             addMessage('system', `✅ Bundle deleted`);
           }
+        }
+      };
+
+      const startEdit = (type, index) => {
+        if (type === 'product') {
+          setEditingItem({ ...products[index], index });
+          setEditingType('product');
+        } else {
+          setEditingItem({ ...bundles[index], index });
+          setEditingType('bundle');
+        }
+      };
+
+      const saveEdit = () => {
+        if (editingType === 'product') {
+          const newProducts = [...products];
+          const { index, ...itemData } = editingItem;
+          newProducts[index] = itemData;
+          setProducts(newProducts);
+          addMessage('system', `✅ Product updated`);
+        } else {
+          const newBundles = [...bundles];
+          const { index, ...itemData } = editingItem;
+          newBundles[index] = itemData;
+          setBundles(newBundles);
+          addMessage('system', `✅ Bundle updated`);
+        }
+        setEditingItem(null);
+        setEditingType(null);
+      };
+
+      const cancelEdit = () => {
+        setEditingItem(null);
+        setEditingType(null);
+      };
+
+      const initializeNewItem = (type) => {
+        const template = type === 'product' 
+          ? (products.length > 0 ? Object.keys(products[0]).reduce((acc, key) => ({ ...acc, [key]: '' }), {}) : {})
+          : (bundles.length > 0 ? Object.keys(bundles[0]).reduce((acc, key) => ({ ...acc, [key]: '' }), {}) : {});
+        setNewItem(template);
+        setCreateType(type);
+        setShowCreateForm(true);
+      };
+
+      const saveNewItem = () => {
+        if (createType === 'product') {
+          setProducts([...products, newItem]);
+          addMessage('system', `✅ New product added!`);
+        } else {
+          setBundles([...bundles, newItem]);
+          addMessage('system', `✅ New bundle added!`);
+        }
+        setNewItem({});
+        setShowCreateForm(false);
+        setActiveTab(createType === 'product' ? 'products' : 'bundles');
+      };
+
+      const askAIToCreate = async (type) => {
+        if (!apiKey) {
+          alert('Please add your API key first');
+          setShowApiKeyInput(true);
+          return;
+        }
+
+        setIsLoading(true);
+        setActiveTab('chat');
+        
+        try {
+          const prompt = type === 'product' 
+            ? `Create a new product template based on my existing products. Give me a filled-out example with realistic values that matches my data structure. Format it as JSON with the exact column names I use.`
+            : `Create a new bundle template based on my existing bundles and products. Give me a filled-out example with realistic values. Include which products should be in this bundle. Format it as JSON with the exact column names I use.`;
+          
+          addMessage('user', prompt);
+          const response = await callClaudeAPI(prompt);
+          addMessage('assistant', response + '\n\n💡 Copy the JSON and paste it into the create form, or I can help you refine it!');
+        } catch (error) {
+          addMessage('system', `❌ Error: ${error.message}`);
+        } finally {
+          setIsLoading(false);
         }
       };
 
@@ -384,10 +508,10 @@ INSTRUCTIONS:
                           <div className="flex flex-wrap gap-2 justify-center max-w-2xl mx-auto">
                             {[
                               "What bundles contain which products?",
-                              "Help me create a new premium bundle",
-                              "Analyze my pricing strategy",
-                              "Find my best-selling products",
-                              "Suggest product optimizations"
+                              "Analyze my pricing strategy and suggest improvements",
+                              "Which products should I bundle together?",
+                              "How can I optimize my catalog for better margins?",
+                              "Compare bundle values vs individual products"
                             ].map((q, i) => (
                               <button
                                 key={i}
@@ -458,25 +582,39 @@ INSTRUCTIONS:
                   <div>
                     <div className="flex justify-between items-center mb-4">
                       <h3 className="text-xl font-semibold">Your Products</h3>
-                      {products.length > 0 && (
+                      <div className="flex gap-2">
                         <button
-                          onClick={() => downloadCSV(products, 'products.csv')}
-                          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-semibold"
+                          onClick={() => initializeNewItem('product')}
+                          className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition text-sm font-semibold"
                         >
-                          💾 Download CSV
+                          ➕ Add Product
                         </button>
-                      )}
+                        {products.length > 0 && (
+                          <button
+                            onClick={() => downloadCSV(products, 'products.csv')}
+                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-semibold"
+                          >
+                            💾 Download CSV
+                          </button>
+                        )}
+                      </div>
                     </div>
                     
                     {products.length === 0 ? (
                       <div className="text-center py-12 text-gray-500">
                         <p className="text-lg">No products loaded yet.</p>
-                        <p className="text-sm mt-2">Upload a products.csv file to get started.</p>
+                        <p className="text-sm mt-2">Upload a products.csv file or create one from scratch.</p>
+                        <button
+                          onClick={() => initializeNewItem('product')}
+                          className="mt-4 px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition font-semibold"
+                        >
+                          Create Your First Product
+                        </button>
                       </div>
                     ) : (
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm">
-                          <thead className="bg-gray-100 border-b-2 border-gray-300">
+                          <thead className="bg-purple-100 border-b-2 border-purple-300">
                             <tr>
                               {Object.keys(products[0]).map((key, i) => (
                                 <th key={i} className="px-4 py-3 text-left font-semibold text-gray-700">
@@ -487,28 +625,113 @@ INSTRUCTIONS:
                             </tr>
                           </thead>
                           <tbody>
-                            {products.slice(0, 50).map((product, idx) => (
-                              <tr key={idx} className="border-b border-gray-200 hover:bg-gray-50">
+                            {products.map((product, idx) => (
+                              <tr key={idx} className="border-b border-gray-200 hover:bg-purple-50">
                                 {Object.values(product).map((val, i) => (
                                   <td key={i} className="px-4 py-3">{val}</td>
                                 ))}
                                 <td className="px-4 py-3">
-                                  <button
-                                    onClick={() => deleteItem('product', idx)}
-                                    className="text-red-600 hover:text-red-800 text-xs font-semibold"
-                                  >
-                                    Delete
-                                  </button>
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() => startEdit('product', idx)}
+                                      className="text-blue-600 hover:text-blue-800 text-xs font-semibold"
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      onClick={() => deleteItem('product', idx)}
+                                      className="text-red-600 hover:text-red-800 text-xs font-semibold"
+                                    >
+                                      Delete
+                                    </button>
+                                  </div>
                                 </td>
                               </tr>
                             ))}
                           </tbody>
                         </table>
-                        {products.length > 50 && (
-                          <p className="text-center py-4 text-gray-500 text-sm">
-                            Showing first 50 of {products.length} products
-                          </p>
-                        )}
+                      </div>
+                    )}
+
+                    {/* Edit Modal */}
+                    {editingItem && editingType === 'product' && (
+                      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                        <div className="bg-white rounded-xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+                          <h3 className="text-2xl font-bold mb-4">Edit Product</h3>
+                          <div className="space-y-3">
+                            {Object.entries(editingItem).filter(([key]) => key !== 'index').map(([key, value]) => (
+                              <div key={key}>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">{key}</label>
+                                <input
+                                  type="text"
+                                  value={value}
+                                  onChange={(e) => setEditingItem({...editingItem, [key]: e.target.value})}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                          <div className="flex gap-3 mt-6">
+                            <button
+                              onClick={saveEdit}
+                              className="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold"
+                            >
+                              Save Changes
+                            </button>
+                            <button
+                              onClick={cancelEdit}
+                              className="flex-1 px-4 py-3 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition font-semibold"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Create Modal */}
+                    {showCreateForm && createType === 'product' && (
+                      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                        <div className="bg-white rounded-xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+                          <h3 className="text-2xl font-bold mb-4">Create New Product</h3>
+                          <div className="mb-4">
+                            <button
+                              onClick={() => askAIToCreate('product')}
+                              disabled={!apiKey}
+                              className="w-full px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 transition font-semibold"
+                            >
+                              🤖 Ask AI to Generate Example
+                            </button>
+                          </div>
+                          <div className="space-y-3">
+                            {Object.keys(newItem).map((key) => (
+                              <div key={key}>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">{key}</label>
+                                <input
+                                  type="text"
+                                  value={newItem[key]}
+                                  onChange={(e) => setNewItem({...newItem, [key]: e.target.value})}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                  placeholder={`Enter ${key}`}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                          <div className="flex gap-3 mt-6">
+                            <button
+                              onClick={saveNewItem}
+                              className="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold"
+                            >
+                              Create Product
+                            </button>
+                            <button
+                              onClick={() => setShowCreateForm(false)}
+                              className="flex-1 px-4 py-3 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition font-semibold"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -519,25 +742,39 @@ INSTRUCTIONS:
                   <div>
                     <div className="flex justify-between items-center mb-4">
                       <h3 className="text-xl font-semibold">Your Bundles</h3>
-                      {bundles.length > 0 && (
+                      <div className="flex gap-2">
                         <button
-                          onClick={() => downloadCSV(bundles, 'bundles.csv')}
-                          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-semibold"
+                          onClick={() => initializeNewItem('bundle')}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-semibold"
                         >
-                          💾 Download CSV
+                          ➕ Add Bundle
                         </button>
-                      )}
+                        {bundles.length > 0 && (
+                          <button
+                            onClick={() => downloadCSV(bundles, 'bundles.csv')}
+                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-semibold"
+                          >
+                            💾 Download CSV
+                          </button>
+                        )}
+                      </div>
                     </div>
                     
                     {bundles.length === 0 ? (
                       <div className="text-center py-12 text-gray-500">
                         <p className="text-lg">No bundles loaded yet.</p>
-                        <p className="text-sm mt-2">Upload a bundles.csv file to get started.</p>
+                        <p className="text-sm mt-2">Upload a bundles.csv file or create one from scratch.</p>
+                        <button
+                          onClick={() => initializeNewItem('bundle')}
+                          className="mt-4 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold"
+                        >
+                          Create Your First Bundle
+                        </button>
                       </div>
                     ) : (
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm">
-                          <thead className="bg-gray-100 border-b-2 border-gray-300">
+                          <thead className="bg-blue-100 border-b-2 border-blue-300">
                             <tr>
                               {Object.keys(bundles[0]).map((key, i) => (
                                 <th key={i} className="px-4 py-3 text-left font-semibold text-gray-700">
@@ -548,28 +785,113 @@ INSTRUCTIONS:
                             </tr>
                           </thead>
                           <tbody>
-                            {bundles.slice(0, 50).map((bundle, idx) => (
-                              <tr key={idx} className="border-b border-gray-200 hover:bg-gray-50">
+                            {bundles.map((bundle, idx) => (
+                              <tr key={idx} className="border-b border-gray-200 hover:bg-blue-50">
                                 {Object.values(bundle).map((val, i) => (
                                   <td key={i} className="px-4 py-3">{val}</td>
                                 ))}
                                 <td className="px-4 py-3">
-                                  <button
-                                    onClick={() => deleteItem('bundle', idx)}
-                                    className="text-red-600 hover:text-red-800 text-xs font-semibold"
-                                  >
-                                    Delete
-                                  </button>
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() => startEdit('bundle', idx)}
+                                      className="text-blue-600 hover:text-blue-800 text-xs font-semibold"
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      onClick={() => deleteItem('bundle', idx)}
+                                      className="text-red-600 hover:text-red-800 text-xs font-semibold"
+                                    >
+                                      Delete
+                                    </button>
+                                  </div>
                                 </td>
                               </tr>
                             ))}
                           </tbody>
                         </table>
-                        {bundles.length > 50 && (
-                          <p className="text-center py-4 text-gray-500 text-sm">
-                            Showing first 50 of {bundles.length} bundles
-                          </p>
-                        )}
+                      </div>
+                    )}
+
+                    {/* Edit Modal */}
+                    {editingItem && editingType === 'bundle' && (
+                      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                        <div className="bg-white rounded-xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+                          <h3 className="text-2xl font-bold mb-4">Edit Bundle</h3>
+                          <div className="space-y-3">
+                            {Object.entries(editingItem).filter(([key]) => key !== 'index').map(([key, value]) => (
+                              <div key={key}>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">{key}</label>
+                                <input
+                                  type="text"
+                                  value={value}
+                                  onChange={(e) => setEditingItem({...editingItem, [key]: e.target.value})}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                          <div className="flex gap-3 mt-6">
+                            <button
+                              onClick={saveEdit}
+                              className="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold"
+                            >
+                              Save Changes
+                            </button>
+                            <button
+                              onClick={cancelEdit}
+                              className="flex-1 px-4 py-3 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition font-semibold"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Create Modal */}
+                    {showCreateForm && createType === 'bundle' && (
+                      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                        <div className="bg-white rounded-xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+                          <h3 className="text-2xl font-bold mb-4">Create New Bundle</h3>
+                          <div className="mb-4">
+                            <button
+                              onClick={() => askAIToCreate('bundle')}
+                              disabled={!apiKey}
+                              className="w-full px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 transition font-semibold"
+                            >
+                              🤖 Ask AI to Generate Example
+                            </button>
+                          </div>
+                          <div className="space-y-3">
+                            {Object.keys(newItem).map((key) => (
+                              <div key={key}>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">{key}</label>
+                                <input
+                                  type="text"
+                                  value={newItem[key]}
+                                  onChange={(e) => setNewItem({...newItem, [key]: e.target.value})}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                  placeholder={`Enter ${key}`}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                          <div className="flex gap-3 mt-6">
+                            <button
+                              onClick={saveNewItem}
+                              className="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold"
+                            >
+                              Create Bundle
+                            </button>
+                            <button
+                              onClick={() => setShowCreateForm(false)}
+                              className="flex-1 px-4 py-3 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition font-semibold"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -578,49 +900,42 @@ INSTRUCTIONS:
                 {/* Create Tab */}
                 {activeTab === 'create' && (
                   <div className="max-w-2xl mx-auto">
-                    <h3 className="text-2xl font-bold text-center mb-6">Create New Item</h3>
+                    <h3 className="text-2xl font-bold text-center mb-6">AI-Powered Creation</h3>
                     
-                    <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg p-6 mb-6 border border-purple-200">
-                      <p className="text-gray-700 mb-4">
-                        Let AI help you create a new {createType}! It will analyze your existing data and suggest the perfect template.
+                    <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg p-8 mb-6 border border-purple-200">
+                      <p className="text-gray-700 mb-6 text-center text-lg">
+                        Create new products and bundles with AI assistance!
                       </p>
                       
-                      <div className="flex gap-4 mb-6">
+                      <div className="grid md:grid-cols-2 gap-4">
                         <button
-                          onClick={() => setCreateType('product')}
-                          className={`flex-1 px-6 py-3 rounded-lg font-semibold transition ${
-                            createType === 'product'
-                              ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-lg'
-                              : 'bg-white text-gray-700 border-2 border-gray-300 hover:border-purple-400'
-                          }`}
+                          onClick={() => initializeNewItem('product')}
+                          className="p-6 bg-white rounded-lg border-2 border-purple-300 hover:border-purple-500 hover:shadow-lg transition"
                         >
-                          📦 Product
+                          <div className="text-4xl mb-3">📦</div>
+                          <h4 className="font-bold text-lg mb-2">Create Product</h4>
+                          <p className="text-sm text-gray-600">Add a new product to your catalog</p>
                         </button>
+                        
                         <button
-                          onClick={() => setCreateType('bundle')}
-                          className={`flex-1 px-6 py-3 rounded-lg font-semibold transition ${
-                            createType === 'bundle'
-                              ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-lg'
-                              : 'bg-white text-gray-700 border-2 border-gray-300 hover:border-purple-400'
-                          }`}
+                          onClick={() => initializeNewItem('bundle')}
+                          className="p-6 bg-white rounded-lg border-2 border-blue-300 hover:border-blue-500 hover:shadow-lg transition"
                         >
-                          🎁 Bundle
+                          <div className="text-4xl mb-3">🎁</div>
+                          <h4 className="font-bold text-lg mb-2">Create Bundle</h4>
+                          <p className="text-sm text-gray-600">Build a new product bundle</p>
                         </button>
                       </div>
-
-                      <button
-                        onClick={handleCreateItem}
-                        disabled={!apiKey || isLoading}
-                        className="w-full px-6 py-4 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition font-bold text-lg shadow-lg"
-                      >
-                        {isLoading ? '🤖 AI is creating a template...' : `✨ Generate ${createType.charAt(0).toUpperCase() + createType.slice(1)} Template with AI`}
-                      </button>
                     </div>
 
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                      <p className="text-sm text-blue-800">
-                        💡 <strong>Tip:</strong> After AI generates a template, you can ask it to modify or refine the {createType} in the chat!
-                      </p>
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+                      <h4 className="font-bold mb-3 text-blue-900">💡 AI Tips:</h4>
+                      <ul className="space-y-2 text-sm text-blue-800">
+                        <li>• Click "Ask AI to Generate Example" in the creation form</li>
+                        <li>• Ask in chat: "Help me create a premium bundle with products X, Y, Z"</li>
+                        <li>• AI will match your existing data structure automatically</li>
+                        <li>• You can refine and edit AI suggestions before saving</li>
+                      </ul>
                     </div>
                   </div>
                 )}
