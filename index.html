@@ -899,43 +899,132 @@ INSTRUCTIONS:
 
                 {/* Create Tab */}
                 {activeTab === 'create' && (
-                  <div className="max-w-2xl mx-auto">
-                    <h3 className="text-2xl font-bold text-center mb-6">AI-Powered Creation</h3>
+                  <div className="max-w-3xl mx-auto">
+                    <h3 className="text-2xl font-bold text-center mb-6">AI-Powered Creation Studio</h3>
                     
-                    <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg p-8 mb-6 border border-purple-200">
+                    <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg p-8 mb-6 border-2 border-purple-200">
                       <p className="text-gray-700 mb-6 text-center text-lg">
-                        Create new products and bundles with AI assistance!
+                        Let AI help you create products and bundles with smart suggestions!
                       </p>
                       
-                      <div className="grid md:grid-cols-2 gap-4">
+                      <div className="grid md:grid-cols-2 gap-4 mb-6">
                         <button
-                          onClick={() => initializeNewItem('product')}
-                          className="p-6 bg-white rounded-lg border-2 border-purple-300 hover:border-purple-500 hover:shadow-lg transition"
+                          onClick={() => {
+                            setCreateType('product');
+                            initializeNewItem('product');
+                          }}
+                          className="p-8 bg-white rounded-xl border-2 border-purple-300 hover:border-purple-500 hover:shadow-xl transition transform hover:scale-105"
                         >
-                          <div className="text-4xl mb-3">📦</div>
-                          <h4 className="font-bold text-lg mb-2">Create Product</h4>
-                          <p className="text-sm text-gray-600">Add a new product to your catalog</p>
+                          <div className="text-5xl mb-4">📦</div>
+                          <h4 className="font-bold text-xl mb-2">Create Product</h4>
+                          <p className="text-sm text-gray-600">Add a new product with AI assistance</p>
                         </button>
                         
                         <button
-                          onClick={() => initializeNewItem('bundle')}
-                          className="p-6 bg-white rounded-lg border-2 border-blue-300 hover:border-blue-500 hover:shadow-lg transition"
+                          onClick={() => {
+                            setCreateType('bundle');
+                            initializeNewItem('bundle');
+                          }}
+                          className="p-8 bg-white rounded-xl border-2 border-blue-300 hover:border-blue-500 hover:shadow-xl transition transform hover:scale-105"
                         >
-                          <div className="text-4xl mb-3">🎁</div>
-                          <h4 className="font-bold text-lg mb-2">Create Bundle</h4>
+                          <div className="text-5xl mb-4">🎁</div>
+                          <h4 className="font-bold text-xl mb-2">Create Bundle</h4>
                           <p className="text-sm text-gray-600">Build a new product bundle</p>
                         </button>
                       </div>
+
+                      <div className="bg-white rounded-lg p-6 mb-4 border border-purple-200">
+                        <h4 className="font-bold mb-3 text-purple-900 flex items-center">
+                          <span className="text-2xl mr-2">🤖</span>
+                          Or Ask AI to Create for You
+                        </h4>
+                        <div className="space-y-3">
+                          <button
+                            onClick={async () => {
+                              if (!apiKey) {
+                                alert('Please add your API key first');
+                                setShowApiKeyInput(true);
+                                return;
+                              }
+                              const prompt = "Create a new product for me. Analyze my existing products and suggest a realistic new product that would fit well in my catalog. Include all required fields with appropriate values.";
+                              setInput(prompt);
+                              setActiveTab('chat');
+                              setTimeout(() => {
+                                document.querySelector('form').dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+                              }, 100);
+                            }}
+                            disabled={!apiKey}
+                            className="w-full px-6 py-4 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg hover:from-purple-700 hover:to-purple-800 disabled:bg-gray-300 transition font-semibold text-left flex items-center justify-between group"
+                          >
+                            <span>✨ Generate Product Suggestion</span>
+                            <span className="text-2xl group-hover:translate-x-1 transition">→</span>
+                          </button>
+                          
+                          <button
+                            onClick={async () => {
+                              if (!apiKey) {
+                                alert('Please add your API key first');
+                                setShowApiKeyInput(true);
+                                return;
+                              }
+                              const prompt = "Create a new bundle for me. Analyze my products and bundles, then suggest a compelling new bundle with products that complement each other. Explain why these products work well together.";
+                              setInput(prompt);
+                              setActiveTab('chat');
+                              setTimeout(() => {
+                                document.querySelector('form').dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+                              }, 100);
+                            }}
+                            disabled={!apiKey}
+                            className="w-full px-6 py-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 disabled:bg-gray-300 transition font-semibold text-left flex items-center justify-between group"
+                          >
+                            <span>✨ Generate Bundle Suggestion</span>
+                            <span className="text-2xl group-hover:translate-x-1 transition">→</span>
+                          </button>
+
+                          <button
+                            onClick={async () => {
+                              if (!apiKey) {
+                                alert('Please add your API key first');
+                                setShowApiKeyInput(true);
+                                return;
+                              }
+                              const prompt = "Based on my current catalog, recommend 3 new products I should consider adding. Analyze gaps in my offerings, pricing tiers, and categories. Provide specific suggestions with reasoning.";
+                              setInput(prompt);
+                              setActiveTab('chat');
+                              setTimeout(() => {
+                                document.querySelector('form').dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+                              }, 100);
+                            }}
+                            disabled={!apiKey}
+                            className="w-full px-6 py-4 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-lg hover:from-indigo-700 hover:to-indigo-800 disabled:bg-gray-300 transition font-semibold text-left flex items-center justify-between group"
+                          >
+                            <span>💡 Recommend New Products</span>
+                            <span className="text-2xl group-hover:translate-x-1 transition">→</span>
+                          </button>
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-                      <h4 className="font-bold mb-3 text-blue-900">💡 AI Tips:</h4>
-                      <ul className="space-y-2 text-sm text-blue-800">
-                        <li>• Click "Ask AI to Generate Example" in the creation form</li>
-                        <li>• Ask in chat: "Help me create a premium bundle with products X, Y, Z"</li>
-                        <li>• AI will match your existing data structure automatically</li>
-                        <li>• You can refine and edit AI suggestions before saving</li>
-                      </ul>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-5">
+                        <h4 className="font-bold mb-3 text-blue-900">💡 Quick Tips:</h4>
+                        <ul className="space-y-2 text-sm text-blue-800">
+                          <li>• AI analyzes your existing catalog structure</li>
+                          <li>• Get smart suggestions based on your data</li>
+                          <li>• AI matches your column names automatically</li>
+                          <li>• Refine suggestions in the chat</li>
+                        </ul>
+                      </div>
+
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-5">
+                        <h4 className="font-bold mb-3 text-green-900">🎯 Best Practices:</h4>
+                        <ul className="space-y-2 text-sm text-green-800">
+                          <li>• Upload your CSVs first for better AI suggestions</li>
+                          <li>• Ask AI to explain bundle recommendations</li>
+                          <li>• Request multiple options to choose from</li>
+                          <li>• Let AI analyze pricing and categories</li>
+                        </ul>
+                      </div>
                     </div>
                   </div>
                 )}
