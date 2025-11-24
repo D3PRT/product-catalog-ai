@@ -42,10 +42,12 @@
           complete: (results) => {
             if (type === 'products') {
               setProducts(results.data);
-              addMessage('system', `✅ Loaded ${results.data.length} products`);
+              const columns = results.data.length > 0 ? Object.keys(results.data[0]).join(', ') : 'none';
+              addMessage('system', `✅ Loaded ${results.data.length} products\nColumns: ${columns}`);
             } else {
               setBundles(results.data);
-              addMessage('system', `✅ Loaded ${results.data.length} bundles`);
+              const columns = results.data.length > 0 ? Object.keys(results.data[0]).join(', ') : 'none';
+              addMessage('system', `✅ Loaded ${results.data.length} bundles\nColumns: ${columns}`);
             }
           },
           error: (error) => {
@@ -56,6 +58,72 @@
 
       const addMessage = (role, content) => {
         setMessages(prev => [...prev, { role, content }]);
+      };
+
+      // Smart bundle analysis functions
+      const analyzeBundleRelationships = () => {
+        if (!products || !bundles) return null;
+        
+        // Try to find relationship fields
+        const bundleData = bundles[0];
+        const productData = products[0];
+        
+        // Look for common ID or SKU fields
+        const productIdFields = Object.keys(productData).filter(k => 
+          k.toLowerCase().includes('id') || 
+          k.toLowerCase().includes('sku') || 
+          k.toLowerCase().includes('code')
+        );
+        
+        const bundleProductFields = Object.keys(bundleData).filter(k =>
+          k.toLowerCase().includes('product') ||
+          k.toLowerCase().includes('item') ||
+          k.toLowerCase().includes('sku') ||
+          k.toLowerCase().includes('contains')
+        );
+        
+        return { productIdFields, bundleProductFields };
+      };
+
+      const findProductsInBundle = (bundle) => {
+        if (!products) return [];
+        
+        const relationships = analyzeBundleRelationships();
+        if (!relationships) return [];
+        
+        const foundProducts = [];
+        const bundleValues = Object.values(bundle).join('|').toLowerCase();
+        
+        // Try to match products by ID/SKU/name
+        products.forEach(product => {
+          const productIdentifiers = [
+            ...relationships.productIdFields.map(f => product[f]),
+            product[Object.keys(product).find(k => k.toLowerCase().includes('name'))]
+          ].filter(Boolean);
+          
+          productIdentifiers.forEach(identifier => {
+            if (identifier && bundleValues.includes(identifier.toString().toLowerCase())) {
+              foundProducts.push(product);
+            }
+          });
+        });
+        
+        return [...new Set(foundProducts)]; // Remove duplicates
+      };
+
+      const findBundlesWithProduct = (productName) => {
+        if (!bundles || !products) return [];
+        
+        const matchingBundles = [];
+        
+        bundles.forEach(bundle => {
+          const bundleValues = Object.values(bundle).join('|').toLowerCase();
+          if (bundleValues.includes(productName.toLowerCase())) {
+            matchingBundles.push(bundle);
+          }
+        });
+        
+        return matchingBundles;
       };
 
       const analyzeQuery = (query) => {
@@ -232,8 +300,155 @@
           return "Please upload a CSV file first.";
         }
 
+        // Bundle analysis queries
+        if (lowerQuery.includes('bundle') && (lowerQuery.includes('contain') || lowerQuery.includes('include') || lowerQuery.includes('has') || lowerQuery.includes('product'))) {
+          if (!bundles || !products) {
+            return bundles ? "I need both products and bundles uploaded to analyze relationships." : "Please upload bundles.csv first.";
+          }
+          
+          // Show all bundle-product relationships
+          if (lowerQuery.includes('all') || lowerQuery.includes('which')) {
+            const nameField = Object.keys(bundles[0]).find(k => k.toLowerCase().includes('name') || k.toLowerCase().includes('title')) || Object.keys(bundles[0])[0];
+            let response = `Bundle → Products Analysis:\n\n`;
+            
+            bundles.slice(0, 20).forEach((bundle, i) => {
+              const productsInBundle = findProductsInBundle(bundle);
+              response += `${i + 1}. ${bundle[nameField]}\n`;
+              
+              if (productsInBundle.length > 0) {
+                const productNameField = Object.keys(products[0]).find(k => k.toLowerCase().includes('name')) || Object.keys(products[0])[0];
+                response += `   Contains ${productsInBundle.length} products:\n`;
+                productsInBundle.forEach(p => {
+                  response += `   • ${p[productNameField]}\n`;
+                });
+              } else {
+                // Show raw bundle data to help understand structure
+                response += `   Raw data: ${Object.entries(bundle).slice(0, 3).map(([k, v]) => `${k}: ${v}`).join(', ')}\n`;
+              }
+              response += '\n';
+            });
+            
+            if (bundles.length > 20) {
+              response += `... and ${bundles.length - 20} more bundles`;
+            }
+            
+            return response;
+          }
+          
+          // Search for specific bundle
+          const searchTerms = query.toLowerCase().replace(/bundle|contain|include|has|product|which|what/g, '').trim();
+          if (searchTerms) {
+            const nameField = Object.keys(bundles[0]).find(k => k.toLowerCase().includes('name') || k.toLowerCase().includes('title')) || Object.keys(bundles[0])[0];
+            const matchingBundles = bundles.filter(b => 
+              b[nameField]?.toLowerCase().includes(searchTerms)
+            );
+            
+            if (matchingBundles.length > 0) {
+              let response = `Found ${matchingBundles.length} matching bundle(s):\n\n`;
+              matchingBundles.forEach(bundle => {
+                const productsInBundle = findProductsInBundle(bundle);
+                response += `Bundle: ${bundle[nameField]}\n`;
+                
+                if (productsInBundle.length > 0) {
+                  const productNameField = Object.keys(products[0]).find(k => k.toLowerCase().includes('name')) || Object.keys(products[0])[0];
+                  response += `Contains:\n`;
+                  productsInBundle.forEach(p => {
+                    response += `  • ${p[productNameField]}\n`;
+                  });
+                } else {
+                  response += `Bundle details:\n`;
+                  Object.entries(bundle).slice(0, 5).forEach(([k, v]) => {
+                    if (v) response += `  ${k}: ${v}\n`;
+                  });
+                }
+                response += '\n';
+              });
+              return response;
+            }
+          }
+        }
+
+        // Find which bundles contain a specific product
+        if (lowerQuery.match(/\b(which|what|find)\b.*bundles.*\b(contain|include|has)\b/) || 
+            lowerQuery.match(/\b(bundles|bundle)\b.*\b(with|containing)\b/)) {
+          if (!bundles || !products) {
+            return "I need both products and bundles uploaded to analyze relationships.";
+          }
+          
+          const searchTerms = query.toLowerCase()
+            .replace(/which|what|find|bundles|bundle|contain|include|has|with|containing/g, '')
+            .trim()
+            .split(/\s+/)
+            .filter(t => t.length > 2);
+          
+          if (searchTerms.length > 0) {
+            const bundleNameField = Object.keys(bundles[0]).find(k => k.toLowerCase().includes('name')) || Object.keys(bundles[0])[0];
+            let matchingBundles = [];
+            
+            searchTerms.forEach(term => {
+              const matches = findBundlesWithProduct(term);
+              matchingBundles = [...matchingBundles, ...matches];
+            });
+            
+            matchingBundles = [...new Set(matchingBundles)];
+            
+            if (matchingBundles.length > 0) {
+              let response = `Found ${matchingBundles.length} bundle(s) containing "${searchTerms.join(' ')}":\n\n`;
+              matchingBundles.forEach((bundle, i) => {
+                response += `${i + 1}. ${bundle[bundleNameField]}\n`;
+                Object.entries(bundle).slice(1, 4).forEach(([k, v]) => {
+                  if (v) response += `   ${k}: ${v}\n`;
+                });
+                response += '\n';
+              });
+              return response;
+            }
+            return `No bundles found containing "${searchTerms.join(' ')}"`;
+          }
+        }
+
+        // Generic listing - if they say anything about "list", "show", "display", "tell me about"
+        if (lowerQuery.match(/\b(list|show|display|tell|what|get|see)\b/)) {
+          const data = products || bundles;
+          if (data && data.length > 0) {
+            const nameField = Object.keys(data[0]).find(k => k.toLowerCase().includes('name') || k.toLowerCase().includes('title')) || Object.keys(data[0])[0];
+            const dataType = products ? 'products' : 'bundles';
+            let response = `Here are your ${dataType} (showing first 10 of ${data.length}):\n\n`;
+            data.slice(0, 10).forEach((p, i) => {
+              response += `${i + 1}. ${p[nameField]}\n`;
+              // Show a couple key fields
+              Object.entries(p).slice(1, 3).forEach(([key, val]) => {
+                if (val) response += `   ${key}: ${val}\n`;
+              });
+            });
+            if (data.length > 10) {
+              response += `\n... and ${data.length - 10} more items`;
+            }
+            return response;
+          }
+        }
+
         // Default response with suggestions
-        return `I can help you with:\n\n• "How many products do we have?"\n• "What categories are available?"\n• "Show me the most expensive items"\n• "Find products under $50"\n• "Search for [product name]"\n• "Help me add a new product"\n• "Find duplicate entries"\n• "Show all products"\n\nWhat would you like to know?`;
+        const hasBundle = bundles && products;
+        return `I can help you with:
+
+${hasBundle ? '📦 Bundle Analysis:\n• "What bundles contain which products?"\n• "Which bundles contain [product name]?"\n• "Show me what\'s in [bundle name]"\n\n' : ''}📊 Data Analysis:
+• "How many products do we have?"
+• "What categories are available?"
+• "Show me the most expensive items"
+• "Find products under $50"
+
+🔍 Search:
+• "Search for [product name]"
+• "Find duplicate entries"
+• "Show all products"
+
+➕ Management:
+• "Help me add a new product"
+• Or just ask "show me" or "list" to see your data
+
+${!hasBundle ? '\n💡 Tip: Upload both products.csv AND bundles.csv to unlock bundle analysis features!\n' : ''}
+What would you like to know?`;
       };
 
       const handleSubmit = async (e) => {
@@ -250,15 +465,27 @@
         addMessage('user', userMessage);
         setIsLoading(true);
 
+        // Debug logging
+        console.log('Query:', userMessage);
+        console.log('Has products:', !!products);
+        console.log('Has bundles:', !!bundles);
+
         // Simulate thinking time
         setTimeout(() => {
           const response = analyzeQuery(userMessage);
+          console.log('Response:', response);
           addMessage('assistant', response);
           setIsLoading(false);
         }, 500);
       };
 
-      const quickActions = [
+      const quickActions = bundles && products ? [
+        "What bundles contain which products?",
+        "How many products do we have?",
+        "Show me the most expensive items",
+        "What categories are available?",
+        "Find duplicate entries"
+      ] : [
         "How many products do we have?",
         "Show me the most expensive items",
         "What categories are available?",
