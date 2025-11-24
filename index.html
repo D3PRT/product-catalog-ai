@@ -61,10 +61,18 @@
       const analyzeQuery = (query) => {
         const lowerQuery = query.toLowerCase();
         
+        // Check if any data is loaded
+        if (!products && !bundles) {
+          return "Please upload at least one CSV file (products or bundles) to get started.";
+        }
+        
         // Count questions
         if (lowerQuery.includes('how many') || lowerQuery.includes('count')) {
           if (products) {
             return `You have ${products.length} products${bundles ? ` and ${bundles.length} bundles` : ''}.`;
+          }
+          if (bundles) {
+            return `You have ${bundles.length} bundles.`;
           }
           return "No data loaded yet.";
         }
@@ -78,38 +86,40 @@
           if (bundles) {
             response += `Bundle columns: ${Object.keys(bundles[0]).join(', ')}`;
           }
-          return response || "No data loaded yet.";
+          return response || "Please upload a CSV file first.";
         }
 
         // Categories
         if (lowerQuery.includes('categor')) {
-          if (products) {
-            const categoryField = Object.keys(products[0]).find(key => 
+          const data = products || bundles;
+          if (data) {
+            const categoryField = Object.keys(data[0]).find(key => 
               key.toLowerCase().includes('category') || key.toLowerCase().includes('type')
             );
             if (categoryField) {
-              const categories = [...new Set(products.map(p => p[categoryField]).filter(Boolean))];
+              const categories = [...new Set(data.map(p => p[categoryField]).filter(Boolean))];
               return `Categories found (${categories.length}):\n${categories.join(', ')}`;
             }
             return "No category field found in your data.";
           }
-          return "Load products first.";
+          return "Please upload a CSV file first.";
         }
 
         // Price-related queries
         if (lowerQuery.includes('price') || lowerQuery.includes('expensive') || lowerQuery.includes('cheap') || lowerQuery.includes('cost')) {
-          if (products) {
-            const priceField = Object.keys(products[0]).find(key => 
+          const data = products || bundles;
+          if (data) {
+            const priceField = Object.keys(data[0]).find(key => 
               key.toLowerCase().includes('price') || key.toLowerCase().includes('cost')
             );
             
             if (priceField) {
-              const productsWithPrice = products.filter(p => p[priceField] && !isNaN(parseFloat(p[priceField])));
-              const prices = productsWithPrice.map(p => parseFloat(p[priceField]));
+              const dataWithPrice = data.filter(p => p[priceField] && !isNaN(parseFloat(p[priceField])));
+              const prices = dataWithPrice.map(p => parseFloat(p[priceField]));
               
               if (prices.length > 0) {
-                const sorted = [...productsWithPrice].sort((a, b) => parseFloat(b[priceField]) - parseFloat(a[priceField]));
-                const nameField = Object.keys(products[0]).find(k => k.toLowerCase().includes('name') || k.toLowerCase().includes('title')) || Object.keys(products[0])[0];
+                const sorted = [...dataWithPrice].sort((a, b) => parseFloat(b[priceField]) - parseFloat(a[priceField]));
+                const nameField = Object.keys(data[0]).find(k => k.toLowerCase().includes('name') || k.toLowerCase().includes('title')) || Object.keys(data[0])[0];
                 
                 let response = `Price Statistics:\n`;
                 response += `• Average: $${(prices.reduce((a, b) => a + b, 0) / prices.length).toFixed(2)}\n`;
@@ -143,22 +153,23 @@
             }
             return "No price field found in your data.";
           }
-          return "Load products first.";
+          return "Please upload a CSV file first.";
         }
 
         // Search for specific products
         if (lowerQuery.includes('find') || lowerQuery.includes('search') || lowerQuery.includes('show me')) {
-          if (products) {
+          const data = products || bundles;
+          if (data) {
             const searchTerms = query.toLowerCase().replace(/find|search|show me|for/g, '').trim().split(/\s+/);
-            const nameField = Object.keys(products[0]).find(k => k.toLowerCase().includes('name') || k.toLowerCase().includes('title')) || Object.keys(products[0])[0];
+            const nameField = Object.keys(data[0]).find(k => k.toLowerCase().includes('name') || k.toLowerCase().includes('title')) || Object.keys(data[0])[0];
             
-            const matches = products.filter(p => {
+            const matches = data.filter(p => {
               const searchText = Object.values(p).join(' ').toLowerCase();
               return searchTerms.some(term => searchText.includes(term));
             });
 
             if (matches.length > 0) {
-              let response = `Found ${matches.length} matching products:\n\n`;
+              let response = `Found ${matches.length} matching items:\n\n`;
               matches.slice(0, 10).forEach((p, i) => {
                 response += `${i + 1}. ${p[nameField]}\n`;
                 Object.entries(p).slice(0, 3).forEach(([key, val]) => {
@@ -171,25 +182,28 @@
               }
               return response;
             }
-            return "No matching products found.";
+            return "No matching items found.";
           }
-          return "Load products first.";
+          return "Please upload a CSV file first.";
         }
 
         // Add new product
-        if (lowerQuery.includes('add') && (lowerQuery.includes('product') || lowerQuery.includes('item'))) {
-          if (products) {
-            const columns = Object.keys(products[0]);
-            return `To add a new product, you need these columns:\n\n${columns.map((col, i) => `${i + 1}. ${col}`).join('\n')}\n\nExample CSV row:\n${columns.join(',')}\n"Example Product","Category","$99.99",...`;
+        if (lowerQuery.includes('add') && (lowerQuery.includes('product') || lowerQuery.includes('item') || lowerQuery.includes('bundle'))) {
+          const data = products || bundles;
+          if (data) {
+            const columns = Object.keys(data[0]);
+            const dataType = products ? 'product' : 'bundle';
+            return `To add a new ${dataType}, you need these columns:\n\n${columns.map((col, i) => `${i + 1}. ${col}`).join('\n')}\n\nExample CSV row:\n${columns.join(',')}\n"Example Product","Category","$99.99",...`;
           }
-          return "Load products first to see the required format.";
+          return "Please upload a CSV file first to see the required format.";
         }
 
         // Duplicates
         if (lowerQuery.includes('duplicate')) {
-          if (products) {
-            const nameField = Object.keys(products[0]).find(k => k.toLowerCase().includes('name') || k.toLowerCase().includes('title')) || Object.keys(products[0])[0];
-            const names = products.map(p => p[nameField]);
+          const data = products || bundles;
+          if (data) {
+            const nameField = Object.keys(data[0]).find(k => k.toLowerCase().includes('name') || k.toLowerCase().includes('title')) || Object.keys(data[0])[0];
+            const names = data.map(p => p[nameField]);
             const duplicates = names.filter((name, index) => names.indexOf(name) !== index && name);
             
             if (duplicates.length > 0) {
@@ -197,23 +211,25 @@
             }
             return "No duplicates found!";
           }
-          return "Load products first.";
+          return "Please upload a CSV file first.";
         }
 
         // Show all data
         if (lowerQuery.includes('show all') || lowerQuery.includes('list all')) {
-          if (products) {
-            const nameField = Object.keys(products[0]).find(k => k.toLowerCase().includes('name') || k.toLowerCase().includes('title')) || Object.keys(products[0])[0];
-            let response = `All Products (${products.length} total):\n\n`;
-            products.slice(0, 20).forEach((p, i) => {
+          const data = products || bundles;
+          if (data) {
+            const nameField = Object.keys(data[0]).find(k => k.toLowerCase().includes('name') || k.toLowerCase().includes('title')) || Object.keys(data[0])[0];
+            const dataType = products ? 'Products' : 'Bundles';
+            let response = `All ${dataType} (${data.length} total):\n\n`;
+            data.slice(0, 20).forEach((p, i) => {
               response += `${i + 1}. ${p[nameField]}\n`;
             });
-            if (products.length > 20) {
-              response += `\n... and ${products.length - 20} more (showing first 20)`;
+            if (data.length > 20) {
+              response += `\n... and ${data.length - 20} more (showing first 20)`;
             }
             return response;
           }
-          return "Load products first.";
+          return "Please upload a CSV file first.";
         }
 
         // Default response with suggestions
