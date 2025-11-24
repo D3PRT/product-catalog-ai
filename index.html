@@ -22,6 +22,8 @@
       const [messages, setMessages] = useState([]);
       const [input, setInput] = useState("");
       const [isLoading, setIsLoading] = useState(false);
+      const [apiKey, setApiKey] = useState("");
+      const [showApiKeyInput, setShowApiKeyInput] = useState(true);
       const messagesEndRef = useRef(null);
 
       const scrollToBottom = () => {
@@ -31,6 +33,15 @@
       useEffect(() => {
         scrollToBottom();
       }, [messages]);
+
+      // Check if API key is stored
+      useEffect(() => {
+        const stored = localStorage.getItem('anthropic_api_key');
+        if (stored) {
+          setApiKey(stored);
+          setShowApiKeyInput(false);
+        }
+      }, []);
 
       const handleFileUpload = (e, type) => {
         const file = e.target.files[0];
@@ -58,9 +69,30 @@
         setMessages(prev => [...prev, { role, content }]);
       };
 
+      const saveApiKey = () => {
+        if (apiKey.trim()) {
+          localStorage.setItem('anthropic_api_key', apiKey.trim());
+          setShowApiKeyInput(false);
+          addMessage('system', '✅ API Key saved! You can now ask questions.');
+        }
+      };
+
+      const clearApiKey = () => {
+        localStorage.removeItem('anthropic_api_key');
+        setApiKey('');
+        setShowApiKeyInput(true);
+        addMessage('system', '🔑 API Key cleared. Please enter a new one.');
+      };
+
       const handleSubmit = async (e) => {
         e.preventDefault();
         if (!input.trim() || isLoading) return;
+
+        if (!apiKey) {
+          addMessage('system', '⚠️ Please enter your Anthropic API key first');
+          setShowApiKeyInput(true);
+          return;
+        }
 
         if (!products && !bundles) {
           addMessage('system', '⚠️ Please upload at least one CSV file first');
@@ -79,15 +111,25 @@
           if (products) {
             context += `\n\nPRODUCTS DATA (${products.length} items):\n`;
             context += `Columns: ${Object.keys(products[0]).join(', ')}\n`;
-            context += `Sample (first 3 rows):\n${JSON.stringify(products.slice(0, 3), null, 2)}\n`;
-            context += `\nFull products data:\n${JSON.stringify(products, null, 2)}\n`;
+            context += `Sample (first 5 rows):\n${JSON.stringify(products.slice(0, 5), null, 2)}\n`;
+            
+            // Only include full data if it's not too large
+            if (products.length <= 100) {
+              context += `\nFull products data:\n${JSON.stringify(products, null, 2)}\n`;
+            } else {
+              context += `\nNote: There are ${products.length} total products. Here's a summary:\n`;
+              context += `First 50 products:\n${JSON.stringify(products.slice(0, 50), null, 2)}\n`;
+            }
           }
           
           if (bundles) {
             context += `\n\nBUNDLES DATA (${bundles.length} items):\n`;
             context += `Columns: ${Object.keys(bundles[0]).join(', ')}\n`;
-            context += `Sample (first 3 rows):\n${JSON.stringify(bundles.slice(0, 3), null, 2)}\n`;
-            context += `\nFull bundles data:\n${JSON.stringify(bundles, null, 2)}\n`;
+            context += `Sample (first 5 rows):\n${JSON.stringify(bundles.slice(0, 5), null, 2)}\n`;
+            
+            if (bundles.length <= 100) {
+              context += `\nFull bundles data:\n${JSON.stringify(bundles, null, 2)}\n`;
+            }
           }
 
           context += `\n\nUser question: ${userMessage}\n\n`;
@@ -101,6 +143,8 @@
             method: "POST",
             headers: {
               "Content-Type": "application/json",
+              "x-api-key": apiKey,
+              "anthropic-version": "2023-06-01"
             },
             body: JSON.stringify({
               model: "claude-sonnet-4-20250514",
@@ -112,7 +156,8 @@
           });
 
           if (!response.ok) {
-            throw new Error(`API request failed: ${response.status}`);
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error?.message || `API request failed: ${response.status}`);
           }
 
           const data = await response.json();
@@ -120,7 +165,12 @@
           addMessage('assistant', assistantMessage);
         } catch (error) {
           console.error("Error:", error);
-          addMessage('system', `❌ Error: ${error.message}`);
+          if (error.message.includes('401') || error.message.includes('authentication')) {
+            addMessage('system', `❌ Authentication failed. Please check your API key and try again.`);
+            setShowApiKeyInput(true);
+          } else {
+            addMessage('system', `❌ Error: ${error.message}`);
+          }
         } finally {
           setIsLoading(false);
         }
@@ -146,6 +196,49 @@
                 Upload your product and bundle CSVs, then ask questions or get help managing your catalog
               </p>
             </div>
+
+            {/* API Key Input */}
+            {showApiKeyInput && (
+              <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg shadow-lg p-6 mb-6">
+                <h2 className="text-xl font-semibold text-gray-800 mb-2">🔑 API Key Required</h2>
+                <p className="text-sm text-gray-600 mb-4">
+                  You need an Anthropic API key to use this tool. Get one at{' '}
+                  <a href="https://console.anthropic.com/" target="_blank" className="text-blue-600 hover:underline">
+                    console.anthropic.com
+                  </a>
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="sk-ant-..."
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button
+                    onClick={saveApiKey}
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                  >
+                    Save Key
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  Your API key is stored locally in your browser and never sent anywhere except to Anthropic's API.
+                </p>
+              </div>
+            )}
+
+            {!showApiKeyInput && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6 flex items-center justify-between">
+                <span className="text-green-800 text-sm">✅ API Key configured</span>
+                <button
+                  onClick={clearApiKey}
+                  className="text-sm text-red-600 hover:text-red-800 underline"
+                >
+                  Clear & Re-enter
+                </button>
+              </div>
+            )}
 
             {/* File Upload Section */}
             <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
@@ -179,7 +272,7 @@
             </div>
 
             {/* Quick Actions */}
-            {(products || bundles) && messages.length === 0 && (
+            {(products || bundles) && messages.length === 0 && !showApiKeyInput && (
               <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
                 <h3 className="text-lg font-semibold text-gray-800 mb-3">💡 Try asking:</h3>
                 <div className="flex flex-wrap gap-2">
@@ -202,7 +295,7 @@
               <div className="h-96 overflow-y-auto p-6 space-y-4">
                 {messages.length === 0 ? (
                   <div className="text-center text-gray-500 mt-20">
-                    <p className="text-lg">👋 Upload your CSV files and start asking questions!</p>
+                    <p className="text-lg">👋 {showApiKeyInput ? 'Enter your API key to get started!' : 'Upload your CSV files and start asking questions!'}</p>
                     <p className="text-sm mt-2">I can help you search, analyze, and manage your product catalog</p>
                   </div>
                 ) : (
@@ -246,13 +339,13 @@
                     type="text"
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
-                    placeholder="Ask anything about your catalog..."
-                    disabled={!products && !bundles}
+                    placeholder={!apiKey ? "Enter API key first..." : !products && !bundles ? "Upload CSV files first..." : "Ask anything about your catalog..."}
+                    disabled={!apiKey || (!products && !bundles)}
                     className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
                   />
                   <button
                     type="submit"
-                    disabled={!input.trim() || isLoading || (!products && !bundles)}
+                    disabled={!input.trim() || isLoading || !apiKey || (!products && !bundles)}
                     className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition"
                   >
                     Send
