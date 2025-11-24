@@ -88,21 +88,46 @@
 
       const callClaudeAPI = async (userPrompt) => {
         try {
-          const context = `You are an AI assistant helping manage a product catalog. You help analyze data, create new products/bundles, and answer questions.
+          // Prepare data summary and full data
+          let dataContext = '';
+          
+          if (products.length > 0) {
+            dataContext += `\n\nPRODUCTS (${products.length} total):\n`;
+            dataContext += `Columns: ${Object.keys(products[0]).join(', ')}\n\n`;
+            
+            // Include full data for small datasets, sample for large
+            if (products.length <= 100) {
+              dataContext += `Complete products data:\n${JSON.stringify(products, null, 2)}\n`;
+            } else {
+              dataContext += `Sample products (first 20):\n${JSON.stringify(products.slice(0, 20), null, 2)}\n`;
+              dataContext += `\nNote: ${products.length} total products available. These are the first 20 as examples.\n`;
+            }
+          }
+          
+          if (bundles.length > 0) {
+            dataContext += `\n\nBUNDLES (${bundles.length} total):\n`;
+            dataContext += `Columns: ${Object.keys(bundles[0]).join(', ')}\n\n`;
+            
+            if (bundles.length <= 100) {
+              dataContext += `Complete bundles data:\n${JSON.stringify(bundles, null, 2)}\n`;
+            } else {
+              dataContext += `Sample bundles (first 20):\n${JSON.stringify(bundles.slice(0, 20), null, 2)}\n`;
+              dataContext += `\nNote: ${bundles.length} total bundles available. These are the first 20 as examples.\n`;
+            }
+          }
 
-Current Data:
-- Products: ${products.length} items
-- Bundles: ${bundles.length} items
+          const context = `You are an AI assistant helping manage a product catalog. You have DIRECT ACCESS to the user's data below. Analyze it and answer their questions directly.
 
-${products.length > 0 ? `Product columns: ${Object.keys(products[0]).join(', ')}` : ''}
-${bundles.length > 0 ? `Bundle columns: ${Object.keys(bundles[0]).join(', ')}` : ''}
+${dataContext}
 
-${products.length > 0 && products.length <= 50 ? `\nProducts data:\n${JSON.stringify(products, null, 2)}` : ''}
-${bundles.length > 0 && bundles.length <= 50 ? `\nBundles data:\n${JSON.stringify(bundles, null, 2)}` : ''}
+USER QUESTION: ${userPrompt}
 
-User question: ${userPrompt}
-
-Please provide a helpful, concise response. If the user wants to create something, provide a structured format they can use.`;
+INSTRUCTIONS:
+- You HAVE the data above - analyze it directly
+- Answer questions about products, bundles, pricing, relationships, etc.
+- If asked to create new items, generate realistic examples based on the existing data structure
+- Be specific and reference actual data from above
+- Don't ask the user to provide data - you already have it above`;
 
           // Call Netlify function instead of direct API
           const response = await fetch("/.netlify/functions/claude-proxy", {
