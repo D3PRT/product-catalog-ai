@@ -8,6 +8,7 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
 </head>
@@ -31,6 +32,14 @@
       const [createType, setCreateType] = useState('product');
       const [newItem, setNewItem] = useState({});
       const [showCreateForm, setShowCreateForm] = useState(false);
+      const [showExcelWizard, setShowExcelWizard] = useState(false);
+      const [excelFile, setExcelFile] = useState(null);
+      const [excelSheets, setExcelSheets] = useState([]);
+      const [selectedSheet, setSelectedSheet] = useState(null);
+      const [excelData, setExcelData] = useState(null);
+      const [dataIssues, setDataIssues] = useState([]);
+      const [columnMappings, setColumnMappings] = useState({});
+      const [wizardStep, setWizardStep] = useState(1);
       const messagesEndRef = useRef(null);
 
       const scrollToBottom = () => {
@@ -53,6 +62,16 @@
         const file = e.target.files[0];
         if (!file) return;
 
+        // Check if it's an Excel file
+        if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+          setExcelFile(file);
+          setShowExcelWizard(true);
+          setWizardStep(1);
+          processExcelFile(file);
+          return;
+        }
+
+        // Handle CSV as before
         Papa.parse(file, {
           header: true,
           skipEmptyLines: true,
@@ -69,6 +88,206 @@
             addMessage('system', `❌ Error parsing ${type}: ${error.message}`);
           }
         });
+      };
+
+      const processExcelFile = (file) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            
+            // Get all sheet names
+            const sheets = workbook.SheetNames.map(name => ({
+              name,
+              data: XLSX.utils.sheet_to_json(workbook.Sheets[name], { defval: '' })
+            }));
+            
+            setExcelSheets(sheets);
+            
+            // Auto-select first sheet if only one
+            if (sheets.length === 1) {
+              handleSheetSelect(sheets[0], 'products');
+            }
+          } catch (error) {
+            addMessage('system', `❌ Error reading Excel file: ${error.message}`);
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      };
+
+      const handleSheetSelect = (sheet, targetType) => {
+        setSelectedSheet(sheet);
+        setExcelData(sheet.data);
+        analyzeDataQuality(sheet.data);
+        suggestColumnMappings(sheet.data, targetType);
+        setWizardStep(2);
+      };
+
+      const analyzeDataQuality = (data) => {
+        const issues = [];
+        
+        if (data.length === 0) {
+          issues.push({ type: 'error', message: 'Sheet is empty' });
+          setDataIssues(issues);
+          return;
+        }
+
+        const columns = Object.keys(data[0]);
+        
+        // Check for empty columns
+        columns.forEach(col => {
+          const emptyCount = data.filter(row => !row[col] || row[col] === '').length;
+          if (emptyCount > 0) {
+            issues.push({
+              type: 'warning',
+              message: `Column "${col}" has ${emptyCount} empty cells`,
+              fix: () => fillEmptyWithDefault(col)
+            });
+          }
+        });
+
+        // Check for duplicate rows
+        const seen = new Set();
+        const duplicates = data.filter(row => {
+          const key = JSON.stringify(row);
+          if (seen.has(key)) return true;
+          seen.add(key);
+          return false;
+        });
+        
+        if (duplicates.length > 0) {
+          issues.push({
+            type: 'warning',
+            message: `Found ${duplicates.length} duplicate rows`,
+            fix: () => removeDuplicates()
+          });
+        }
+
+        // Check for inconsistent price formatting
+        const priceColumns = columns.filter(col => 
+          col.toLowerCase().includes('price') || col.toLowerCase().includes('cost')
+        );
+        
+        priceColumns.forEach(col => {
+          const hasInconsistentFormat = data.some(row => {
+            const val = String(row[col]);
+            return val.includes('$') || val.includes('£') || val.includes('€');
+          });
+          
+          if (hasInconsistentFormat) {
+            issues.push({
+              type: 'info',
+              message: `Column "${col}" has currency symbols (will be cleaned)`,
+              fix: () => cleanPriceFormat(col)
+            });
+          }
+        });
+
+        setDataIssues(issues);
+      };
+
+      const suggestColumnMappings = (data, targetType) => {
+        if (data.length === 0) return;
+
+        const sourceColumns = Object.keys(data[0]);
+        const mappings = {};
+
+        // Smart column detection
+        const detectColumn = (patterns) => {
+          return sourceColumns.find(col => 
+            patterns.some(pattern => col.toLowerCase().includes(pattern))
+          );
+        };
+
+        mappings.name = detectColumn(['name', 'title', 'product', 'item']);
+        mappings.price = detectColumn(['price', 'cost', 'amount']);
+        mappings.sku = detectColumn(['sku', 'code', 'id']);
+        mappings.category = detectColumn(['category', 'type', 'group']);
+        mappings.description = detectColumn(['description', 'desc', 'details']);
+
+        setColumnMappings(mappings);
+      };
+
+      const fillEmptyWithDefault = (column) => {
+        const updated = excelData.map(row => ({
+          ...row,
+          [column]: row[column] || 'N/A'
+        }));
+        setExcelData(updated);
+        analyzeDataQuality(updated);
+      };
+
+      const removeDuplicates = () => {
+        const unique = [];
+        const seen = new Set();
+        
+        excelData.forEach(row => {
+          const key = JSON.stringify(row);
+          if (!seen.has(key)) {
+            seen.add(key);
+            unique.push(row);
+          }
+        });
+        
+        setExcelData(unique);
+        analyzeDataQuality(unique);
+        addMessage('system', `✅ Removed ${excelData.length - unique.length} duplicate rows`);
+      };
+
+      const cleanPriceFormat = (column) => {
+        const updated = excelData.map(row => ({
+          ...row,
+          [column]: String(row[column]).replace(/[$£€,]/g, '').trim()
+        }));
+        setExcelData(updated);
+        analyzeDataQuality(updated);
+        addMessage('system', `✅ Cleaned price format in "${column}"`);
+      };
+
+      const applyMappingsAndImport = (targetType) => {
+        const mapped = excelData.map(row => {
+          const newRow = {};
+          Object.entries(columnMappings).forEach(([target, source]) => {
+            if (source) {
+              newRow[target] = row[source];
+            }
+          });
+          return newRow;
+        });
+
+        if (targetType === 'products') {
+          setProducts(mapped);
+          addMessage('system', `✅ Imported ${mapped.length} products from Excel`);
+        } else {
+          setBundles(mapped);
+          addMessage('system', `✅ Imported ${mapped.length} bundles from Excel`);
+        }
+
+        setShowExcelWizard(false);
+        setWizardStep(1);
+      };
+
+      const exportToExcel = (data, filename, type) => {
+        // Create workbook
+        const wb = XLSX.utils.book_new();
+        
+        // Add main data sheet
+        const ws = XLSX.utils.json_to_sheet(data);
+        XLSX.utils.book_append_sheet(wb, ws, type === 'products' ? 'Products' : 'Bundles');
+        
+        // Add summary sheet
+        const summary = [
+          { Metric: 'Total Items', Value: data.length },
+          { Metric: 'Columns', Value: Object.keys(data[0] || {}).length },
+          { Metric: 'Export Date', Value: new Date().toISOString() }
+        ];
+        const wsSummary = XLSX.utils.json_to_sheet(summary);
+        XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
+        
+        // Write file
+        XLSX.writeFile(wb, filename);
+        addMessage('system', `✅ Exported to ${filename}`);
       };
 
       const addMessage = (role, content) => {
@@ -427,25 +646,27 @@ INSTRUCTIONS:
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="border-2 border-dashed border-purple-300 rounded-lg p-4 hover:border-purple-500 transition">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Products CSV {products.length > 0 && <span className="text-green-600">✓ {products.length} loaded</span>}
+                    Products CSV/Excel {products.length > 0 && <span className="text-green-600">✓ {products.length} loaded</span>}
                   </label>
                   <input
                     type="file"
-                    accept=".csv"
+                    accept=".csv,.xlsx,.xls"
                     onChange={(e) => handleFileUpload(e, 'products')}
                     className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 cursor-pointer"
                   />
+                  <p className="text-xs text-gray-500 mt-2">✨ Supports CSV, XLSX, and XLS files</p>
                 </div>
                 <div className="border-2 border-dashed border-blue-300 rounded-lg p-4 hover:border-blue-500 transition">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Bundles CSV {bundles.length > 0 && <span className="text-green-600">✓ {bundles.length} loaded</span>}
+                    Bundles CSV/Excel {bundles.length > 0 && <span className="text-green-600">✓ {bundles.length} loaded</span>}
                   </label>
                   <input
                     type="file"
-                    accept=".csv"
+                    accept=".csv,.xlsx,.xls"
                     onChange={(e) => handleFileUpload(e, 'bundles')}
                     className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
                   />
+                  <p className="text-xs text-gray-500 mt-2">✨ Supports CSV, XLSX, and XLS files</p>
                 </div>
               </div>
             </div>
@@ -592,9 +813,15 @@ INSTRUCTIONS:
                         {products.length > 0 && (
                           <button
                             onClick={() => downloadCSV(products, 'products.csv')}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-semibold"
+                          >
+                            💾 CSV
+                          </button>
+                          <button
+                            onClick={() => exportToExcel(products, 'products.xlsx', 'products')}
                             className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-semibold"
                           >
-                            💾 Download CSV
+                            📊 Excel
                           </button>
                         )}
                       </div>
@@ -750,12 +977,20 @@ INSTRUCTIONS:
                           ➕ Add Bundle
                         </button>
                         {bundles.length > 0 && (
-                          <button
-                            onClick={() => downloadCSV(bundles, 'bundles.csv')}
-                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-semibold"
-                          >
-                            💾 Download CSV
-                          </button>
+                          <>
+                            <button
+                              onClick={() => downloadCSV(bundles, 'bundles.csv')}
+                              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-semibold"
+                            >
+                              💾 CSV
+                            </button>
+                            <button
+                              onClick={() => exportToExcel(bundles, 'bundles.xlsx', 'bundles')}
+                              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-semibold"
+                            >
+                              📊 Excel
+                            </button>
+                          </>
                         )}
                       </div>
                     </div>
@@ -1031,6 +1266,254 @@ INSTRUCTIONS:
 
               </div>
             </div>
+
+            {/* Excel Wizard Modal */}
+            {showExcelWizard && (
+              <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+                  
+                  {/* Header */}
+                  <div className="bg-gradient-to-r from-green-600 to-teal-600 p-6 text-white">
+                    <h2 className="text-3xl font-bold flex items-center">
+                      <span className="text-4xl mr-3">📊</span>
+                      Excel Import Wizard
+                    </h2>
+                    <p className="mt-2 text-green-100">Step {wizardStep} of 3</p>
+                  </div>
+
+                  <div className="p-6">
+                    
+                    {/* Step 1: Sheet Selection */}
+                    {wizardStep === 1 && excelSheets.length > 0 && (
+                      <div>
+                        <h3 className="text-2xl font-bold mb-4">Select Sheet to Import</h3>
+                        <p className="text-gray-600 mb-6">Choose which sheet contains your data</p>
+                        
+                        <div className="space-y-3">
+                          {excelSheets.map((sheet, idx) => (
+                            <div key={idx} className="border-2 border-gray-200 rounded-lg p-4 hover:border-green-500 transition">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <h4 className="font-bold text-lg">{sheet.name}</h4>
+                                  <p className="text-sm text-gray-500">{sheet.data.length} rows, {Object.keys(sheet.data[0] || {}).length} columns</p>
+                                </div>
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => handleSheetSelect(sheet, 'products')}
+                                    className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition font-semibold"
+                                  >
+                                    Import as Products
+                                  </button>
+                                  <button
+                                    onClick={() => handleSheetSelect(sheet, 'bundles')}
+                                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold"
+                                  >
+                                    Import as Bundles
+                                  </button>
+                                </div>
+                              </div>
+                              
+                              {/* Preview */}
+                              {sheet.data.length > 0 && (
+                                <div className="mt-4 overflow-x-auto">
+                                  <table className="min-w-full text-xs">
+                                    <thead className="bg-gray-100">
+                                      <tr>
+                                        {Object.keys(sheet.data[0]).slice(0, 5).map((col, i) => (
+                                          <th key={i} className="px-3 py-2 text-left font-semibold">{col}</th>
+                                        ))}
+                                        {Object.keys(sheet.data[0]).length > 5 && (
+                                          <th className="px-3 py-2 text-left font-semibold">...</th>
+                                        )}
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {sheet.data.slice(0, 3).map((row, i) => (
+                                        <tr key={i} className="border-b">
+                                          {Object.values(row).slice(0, 5).map((val, j) => (
+                                            <td key={j} className="px-3 py-2">{String(val).substring(0, 20)}</td>
+                                          ))}
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Step 2: Data Quality Check */}
+                    {wizardStep === 2 && (
+                      <div>
+                        <h3 className="text-2xl font-bold mb-4">Data Quality Report</h3>
+                        <p className="text-gray-600 mb-6">Found {dataIssues.length} potential issues</p>
+
+                        {dataIssues.length === 0 ? (
+                          <div className="bg-green-50 border-2 border-green-200 rounded-lg p-6 mb-6">
+                            <div className="flex items-center">
+                              <span className="text-4xl mr-4">✅</span>
+                              <div>
+                                <h4 className="font-bold text-green-900 text-lg">Data looks great!</h4>
+                                <p className="text-green-700">No issues detected. Ready to import.</p>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-3 mb-6">
+                            {dataIssues.map((issue, idx) => (
+                              <div key={idx} className={`border-2 rounded-lg p-4 ${
+                                issue.type === 'error' ? 'border-red-200 bg-red-50' :
+                                issue.type === 'warning' ? 'border-yellow-200 bg-yellow-50' :
+                                'border-blue-200 bg-blue-50'
+                              }`}>
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center">
+                                    <span className="text-2xl mr-3">
+                                      {issue.type === 'error' ? '❌' : issue.type === 'warning' ? '⚠️' : 'ℹ️'}
+                                    </span>
+                                    <p className="font-semibold">{issue.message}</p>
+                                  </div>
+                                  {issue.fix && (
+                                    <button
+                                      onClick={issue.fix}
+                                      className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition text-sm font-semibold"
+                                    >
+                                      Fix Now
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Data Preview */}
+                        <div className="mb-6">
+                          <h4 className="font-bold text-lg mb-3">Data Preview ({excelData?.length} rows)</h4>
+                          <div className="overflow-x-auto border rounded-lg">
+                            <table className="min-w-full text-sm">
+                              <thead className="bg-gray-100">
+                                <tr>
+                                  {Object.keys(excelData?.[0] || {}).map((col, i) => (
+                                    <th key={i} className="px-4 py-2 text-left font-semibold">{col}</th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {excelData?.slice(0, 5).map((row, i) => (
+                                  <tr key={i} className="border-b hover:bg-gray-50">
+                                    {Object.values(row).map((val, j) => (
+                                      <td key={j} className="px-4 py-2">{String(val)}</td>
+                                    ))}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-3">
+                          <button
+                            onClick={() => setWizardStep(3)}
+                            className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-bold text-lg"
+                          >
+                            Continue to Column Mapping
+                          </button>
+                          <button
+                            onClick={() => { setShowExcelWizard(false); setWizardStep(1); }}
+                            className="px-6 py-3 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition font-semibold"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Step 3: Column Mapping */}
+                    {wizardStep === 3 && (
+                      <div>
+                        <h3 className="text-2xl font-bold mb-4">Column Mapping</h3>
+                        <p className="text-gray-600 mb-6">AI has suggested mappings. Adjust if needed.</p>
+
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                          <p className="text-sm text-blue-900">
+                            💡 <strong>Tip:</strong> Leave unmapped if you don't want to import that column
+                          </p>
+                        </div>
+
+                        <div className="space-y-4 mb-6">
+                          {Object.keys(excelData?.[0] || {}).map((sourceCol, idx) => (
+                            <div key={idx} className="border-2 border-gray-200 rounded-lg p-4">
+                              <div className="flex items-center justify-between">
+                                <div className="flex-1">
+                                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                    Source Column: <span className="text-purple-600">{sourceCol}</span>
+                                  </label>
+                                  <select
+                                    value={Object.entries(columnMappings).find(([, val]) => val === sourceCol)?.[0] || ''}
+                                    onChange={(e) => {
+                                      const newMappings = { ...columnMappings };
+                                      // Remove old mapping
+                                      Object.keys(newMappings).forEach(key => {
+                                        if (newMappings[key] === sourceCol) delete newMappings[key];
+                                      });
+                                      // Add new mapping
+                                      if (e.target.value) {
+                                        newMappings[e.target.value] = sourceCol;
+                                      }
+                                      setColumnMappings(newMappings);
+                                    }}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                                  >
+                                    <option value="">-- Don't import --</option>
+                                    <option value="name">Product Name</option>
+                                    <option value="sku">SKU/Code</option>
+                                    <option value="price">Price</option>
+                                    <option value="category">Category</option>
+                                    <option value="description">Description</option>
+                                    <option value="stock">Stock/Quantity</option>
+                                    <option value={sourceCol}>Keep as "{sourceCol}"</option>
+                                  </select>
+                                </div>
+                                <div className="ml-4 text-right">
+                                  <p className="text-xs text-gray-500">Sample:</p>
+                                  <p className="text-sm font-mono">{String(excelData?.[0]?.[sourceCol]).substring(0, 20)}...</p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="flex gap-3">
+                          <button
+                            onClick={() => applyMappingsAndImport(selectedSheet.name.toLowerCase().includes('bundle') ? 'bundles' : 'products')}
+                            className="flex-1 px-6 py-4 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg hover:from-green-700 hover:to-teal-700 transition font-bold text-lg"
+                          >
+                            ✨ Import Data
+                          </button>
+                          <button
+                            onClick={() => setWizardStep(2)}
+                            className="px-6 py-4 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-semibold"
+                          >
+                            Back
+                          </button>
+                          <button
+                            onClick={() => { setShowExcelWizard(false); setWizardStep(1); }}
+                            className="px-6 py-4 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition font-semibold"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                  </div>
+                </div>
+              </div>
+            )}
 
           </div>
         </div>
