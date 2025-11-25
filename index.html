@@ -649,11 +649,34 @@ INSTRUCTIONS:
 
             {/* File Upload */}
             <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4">📁 Upload Your Data</h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold text-gray-800">📁 Upload Your Data</h2>
+                <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-4 py-2">
+                  <span className="text-2xl">📊</span>
+                  <span className="text-sm font-semibold text-green-800">Excel & CSV Supported!</span>
+                </div>
+              </div>
+              
+              <div className="bg-gradient-to-r from-green-50 to-teal-50 border-2 border-green-200 rounded-lg p-4 mb-4">
+                <h3 className="font-bold text-green-900 mb-2 flex items-center">
+                  <span className="text-2xl mr-2">✨</span>
+                  AI-Powered Excel Assistant
+                </h3>
+                <p className="text-sm text-green-800 mb-3">
+                  Upload Excel files and ask me anything! I can analyze your data, fix issues, map columns, and answer questions about your spreadsheets.
+                </p>
+                <div className="flex flex-wrap gap-2 text-xs">
+                  <span className="bg-white px-3 py-1 rounded-full text-green-700 font-semibold">✓ Auto-detect sheets</span>
+                  <span className="bg-white px-3 py-1 rounded-full text-green-700 font-semibold">✓ Data quality check</span>
+                  <span className="bg-white px-3 py-1 rounded-full text-green-700 font-semibold">✓ Smart column mapping</span>
+                  <span className="bg-white px-3 py-1 rounded-full text-green-700 font-semibold">✓ Ask AI questions</span>
+                </div>
+              </div>
+
               <div className="grid md:grid-cols-2 gap-4">
-                <div className="border-2 border-dashed border-purple-300 rounded-lg p-4 hover:border-purple-500 transition">
+                <div className="border-2 border-dashed border-purple-300 rounded-lg p-4 hover:border-purple-500 transition bg-gradient-to-br from-purple-50 to-white">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Products CSV/Excel {products.length > 0 && <span className="text-green-600">✓ {products.length} loaded</span>}
+                    Products (CSV/Excel) {products.length > 0 && <span className="text-green-600">✓ {products.length} loaded</span>}
                   </label>
                   <input
                     type="file"
@@ -661,11 +684,11 @@ INSTRUCTIONS:
                     onChange={(e) => handleFileUpload(e, 'products')}
                     className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 cursor-pointer"
                   />
-                  <p className="text-xs text-gray-500 mt-2">✨ Supports CSV, XLSX, and XLS files</p>
+                  <p className="text-xs text-gray-500 mt-2">✨ Upload .csv, .xlsx, or .xls files</p>
                 </div>
-                <div className="border-2 border-dashed border-blue-300 rounded-lg p-4 hover:border-blue-500 transition">
+                <div className="border-2 border-dashed border-blue-300 rounded-lg p-4 hover:border-blue-500 transition bg-gradient-to-br from-blue-50 to-white">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Bundles CSV/Excel {bundles.length > 0 && <span className="text-green-600">✓ {bundles.length} loaded</span>}
+                    Bundles (CSV/Excel) {bundles.length > 0 && <span className="text-green-600">✓ {bundles.length} loaded</span>}
                   </label>
                   <input
                     type="file"
@@ -673,7 +696,7 @@ INSTRUCTIONS:
                     onChange={(e) => handleFileUpload(e, 'bundles')}
                     className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
                   />
-                  <p className="text-xs text-gray-500 mt-2">✨ Supports CSV, XLSX, and XLS files</p>
+                  <p className="text-xs text-gray-500 mt-2">✨ Upload .csv, .xlsx, or .xls files</p>
                 </div>
               </div>
             </div>
@@ -732,14 +755,15 @@ INSTRUCTIONS:
                     <div className="h-96 overflow-y-auto mb-4 space-y-4 p-4 bg-gray-50 rounded-lg">
                       {messages.length === 0 ? (
                         <div className="text-center text-gray-500 mt-20">
-                          <p className="text-lg mb-4">👋 Ask me anything!</p>
+                          <p className="text-lg mb-2">👋 Ask me anything!</p>
+                          <p className="text-sm mb-4 text-gray-400">Upload Excel/CSV files and I'll help you analyze them</p>
                           <div className="flex flex-wrap gap-2 justify-center max-w-2xl mx-auto">
                             {[
+                              "📊 What's in my Excel file?",
+                              "🔍 Check my data for errors",
                               "What bundles contain which products?",
-                              "Analyze my pricing strategy and suggest improvements",
-                              "Which products should I bundle together?",
-                              "How can I optimize my catalog for better margins?",
-                              "Compare bundle values vs individual products"
+                              "💰 Analyze my pricing strategy",
+                              "🎯 Which products should I bundle together?"
                             ].map((q, i) => (
                               <button
                                 key={i}
@@ -790,7 +814,7 @@ INSTRUCTIONS:
                         type="text"
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
-                        placeholder="Ask anything... e.g., 'Help me create a new product' or 'What bundles contain X?'"
+                        placeholder="Ask me anything about your Excel/CSV data... e.g., 'What's in my file?' or 'Check for errors'"
                         disabled={!apiKey}
                         className="flex-1 px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100"
                       />
@@ -1282,12 +1306,24 @@ INSTRUCTIONS:
                 <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
                   
                   {/* Header */}
-                  <div className="bg-gradient-to-r from-green-600 to-teal-600 p-6 text-white">
-                    <h2 className="text-3xl font-bold flex items-center">
-                      <span className="text-4xl mr-3">📊</span>
-                      Excel Import Wizard
-                    </h2>
-                    <p className="mt-2 text-green-100">Step {wizardStep} of 3</p>
+                  <div className="bg-gradient-to-r from-green-600 to-teal-600 p-8 text-white">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h2 className="text-4xl font-bold flex items-center mb-2">
+                          <span className="text-5xl mr-4">📊</span>
+                          Excel Import Wizard
+                        </h2>
+                        <p className="text-xl text-green-100">AI-Powered Data Analysis & Import</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm text-green-200">Step {wizardStep} of 3</p>
+                        <div className="flex gap-2 mt-2">
+                          <div className={`w-12 h-2 rounded ${wizardStep >= 1 ? 'bg-white' : 'bg-green-400'}`}></div>
+                          <div className={`w-12 h-2 rounded ${wizardStep >= 2 ? 'bg-white' : 'bg-green-400'}`}></div>
+                          <div className={`w-12 h-2 rounded ${wizardStep >= 3 ? 'bg-white' : 'bg-green-400'}`}></div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="p-6">
