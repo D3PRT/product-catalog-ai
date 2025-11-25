@@ -56,6 +56,10 @@
       const [showFilters, setShowFilters] = useState(false);
       const [savedPresets, setSavedPresets] = useState([]);
       const [sortBy, setSortBy] = useState('relevance');
+      const [showSanityReport, setShowSanityReport] = useState(false);
+      const [sanityReport, setSanityReport] = useState(null);
+      const [isCheckingSanity, setIsCheckingSanity] = useState(false);
+      const [sanityBadge, setSanityBadge] = useState(null);
       const messagesEndRef = useRef(null);
       const searchInputRef = useRef(null);
 
@@ -242,6 +246,247 @@
         const updated = savedPresets.filter(p => p.id !== id);
         setSavedPresets(updated);
         localStorage.setItem('saved_presets', JSON.stringify(updated));
+      };
+
+      // AI Sanity Checker
+      const runAISanityCheck = async (data, type) => {
+        if (!apiKey) {
+          alert('Please add your API key to use AI Sanity Check');
+          setShowApiKeyInput(true);
+          return;
+        }
+
+        if (data.length === 0) {
+          alert(`No ${type} to check!`);
+          return;
+        }
+
+        setIsCheckingSanity(true);
+        setShowSanityReport(true);
+        setSanityReport(null);
+
+        try {
+          // Perform local checks first
+          const localIssues = performLocalChecks(data);
+          
+          // Prepare sample for AI analysis
+          const sampleData = data.slice(0, 50);
+          const columns = Object.keys(data[0] || {});
+
+          const prompt = `You are a data quality expert. Analyze this ${type} catalog data and provide a comprehensive sanity check report.
+
+DATA SAMPLE (${data.length} total rows, showing first ${sampleData.length}):
+${JSON.stringify(sampleData, null, 2)}
+
+COLUMNS: ${columns.join(', ')}
+
+LOCAL ANALYSIS FOUND:
+${JSON.stringify(localIssues, null, 2)}
+
+Perform a thorough sanity check and provide:
+
+1. **CRITICAL ISSUES** - Data problems that must be fixed (missing required fields, invalid data types, extreme outliers, data corruption)
+
+2. **WARNINGS** - Potential issues to review (unusual patterns, possible data entry errors, inconsistencies)
+
+3. **SUGGESTIONS** - Improvements (better organization, additional useful fields, standardization opportunities, best practices)
+
+4. **QUALITY SCORE** - Overall score 0-100 based on:
+   - Data completeness (30%)
+   - Data accuracy (30%)
+   - Data consistency (20%)
+   - Data validity (20%)
+
+5. **COMPLETENESS** - Percentage of fields that are populated
+
+6. **STATISTICS** - Key metrics about the data
+
+7. **ACTIONABLE FIXES** - Specific steps to fix each issue with priority
+
+IMPORTANT: Return ONLY valid JSON in this exact format:
+{
+  "qualityScore": 85,
+  "completeness": 92,
+  "scoreBreakdown": {
+    "dataCompleteness": 90,
+    "dataAccuracy": 85,
+    "dataConsistency": 80,
+    "dataValidity": 85
+  },
+  "critical": [
+    {
+      "issue": "Missing required field: Price",
+      "count": 5,
+      "fix": "Add prices to all products",
+      "priority": "high",
+      "affectedRows": [1, 5, 12, 23, 45]
+    }
+  ],
+  "warnings": [
+    {
+      "issue": "Inconsistent category naming",
+      "count": 3,
+      "suggestion": "Standardize category names",
+      "examples": ["Electronics", "electronic", "ELECTRONICS"]
+    }
+  ],
+  "suggestions": [
+    {
+      "title": "Add description field",
+      "description": "Product descriptions would improve catalog",
+      "impact": "medium",
+      "effort": "low"
+    }
+  ],
+  "statistics": {
+    "totalRows": ${data.length},
+    "completeRows": 92,
+    "issuesFound": 8,
+    "fieldsAnalyzed": ${columns.length}
+  }
+}`;
+
+          const response = await callClaudeAPI(prompt, true);
+          
+          // Parse JSON response
+          let jsonResponse = response.trim();
+          jsonResponse = jsonResponse.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+          
+          const aiReport = JSON.parse(jsonResponse);
+          
+          // Merge with local checks
+          const fullReport = {
+            ...aiReport,
+            localIssues,
+            dataType: type,
+            totalRows: data.length,
+            timestamp: new Date().toISOString()
+          };
+          
+          setSanityReport(fullReport);
+          
+          // Set badge based on score
+          const score = fullReport.qualityScore;
+          if (score >= 90) {
+            setSanityBadge({ color: 'green', icon: '🟢', text: 'Excellent', score });
+          } else if (score >= 70) {
+            setSanityBadge({ color: 'yellow', icon: '🟡', text: 'Good', score });
+          } else {
+            setSanityBadge({ color: 'red', icon: '🔴', text: 'Needs Work', score });
+          }
+          
+          addMessage('system', `✅ Sanity check complete! Quality score: ${score}/100`);
+          
+        } catch (error) {
+          console.error('Sanity check error:', error);
+          addMessage('system', `❌ Sanity check failed: ${error.message}`);
+          setSanityReport({ error: error.message });
+        } finally {
+          setIsCheckingSanity(false);
+        }
+      };
+
+      // Local data quality checks
+      const performLocalChecks = (data) => {
+        const issues = {
+          emptyCells: [],
+          duplicates: 0,
+          formatIssues: [],
+          outliers: []
+        };
+
+        if (data.length === 0) return issues;
+
+        const columns = Object.keys(data[0]);
+        
+        // Check for empty cells
+        columns.forEach(col => {
+          const emptyCount = data.filter(row => !row[col] || row[col] === '').length;
+          if (emptyCount > 0) {
+            issues.emptyCells.push({ column: col, count: emptyCount });
+          }
+        });
+
+        // Check for duplicates
+        const seen = new Set();
+        issues.duplicates = data.filter(row => {
+          const key = JSON.stringify(row);
+          if (seen.has(key)) return true;
+          seen.add(key);
+          return false;
+        }).length;
+
+        // Check price formatting
+        const priceColumns = columns.filter(col => 
+          col.toLowerCase().includes('price') || col.toLowerCase().includes('cost')
+        );
+        
+        priceColumns.forEach(col => {
+          const hasSymbols = data.some(row => {
+            const val = String(row[col]);
+            return val.includes('$') || val.includes('£') || val.includes('€') || val.includes(',');
+          });
+          if (hasSymbols) {
+            issues.formatIssues.push({ column: col, issue: 'Contains currency symbols or commas' });
+          }
+        });
+
+        return issues;
+      };
+
+      // Auto-fix functions
+      const applyAutoFix = (fixType, params) => {
+        switch (fixType) {
+          case 'fillEmpty':
+            fillEmptyCells(params.column, params.value);
+            break;
+          case 'removeDuplicates':
+            removeDuplicateRows();
+            break;
+          case 'cleanPrices':
+            cleanPriceFormatting(params.column);
+            break;
+          default:
+            addMessage('system', '⚠️ Fix type not implemented yet');
+        }
+      };
+
+      const fillEmptyCells = (column, value = 'N/A') => {
+        const updated = products.map(row => ({
+          ...row,
+          [column]: row[column] || value
+        }));
+        setProducts(updated);
+        addMessage('system', `✅ Filled empty cells in "${column}" with "${value}"`);
+        runAISanityCheck(updated, 'products'); // Re-check
+      };
+
+      const removeDuplicateRows = () => {
+        const unique = [];
+        const seen = new Set();
+        
+        products.forEach(row => {
+          const key = JSON.stringify(row);
+          if (!seen.has(key)) {
+            seen.add(key);
+            unique.push(row);
+          }
+        });
+        
+        const removed = products.length - unique.length;
+        setProducts(unique);
+        addMessage('system', `✅ Removed ${removed} duplicate rows`);
+        runAISanityCheck(unique, 'products'); // Re-check
+      };
+
+      const cleanPriceFormatting = (column) => {
+        const updated = products.map(row => ({
+          ...row,
+          [column]: String(row[column]).replace(/[$£€,]/g, '').trim()
+        }));
+        setProducts(updated);
+        addMessage('system', `✅ Cleaned price formatting in "${column}"`);
+        runAISanityCheck(updated, 'products'); // Re-check
       };
 
       const handleFileUpload = (e, type) => {
@@ -1300,8 +1545,24 @@ INSTRUCTIONS:
                 {activeTab === 'products' && (
                   <div>
                     <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-xl font-semibold">Your Products</h3>
+                      <div className="flex items-center gap-3">
+                        <h3 className="text-xl font-semibold">Your Products</h3>
+                        {sanityBadge && sanityBadge.dataType === 'products' && (
+                          <span className={`px-3 py-1 rounded-full text-xs font-bold bg-${sanityBadge.color}-100 text-${sanityBadge.color}-800 flex items-center gap-1`}>
+                            {sanityBadge.icon} {sanityBadge.text} ({sanityBadge.score}/100)
+                          </span>
+                        )}
+                      </div>
                       <div className="flex gap-2">
+                        {products.length > 0 && (
+                          <button
+                            onClick={() => runAISanityCheck(products, 'products')}
+                            disabled={!apiKey || isCheckingSanity}
+                            className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 transition text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isCheckingSanity ? '🔍 Checking...' : '🧠 AI Sanity Check'}
+                          </button>
+                        )}
                         <button
                           onClick={() => initializeNewItem('product')}
                           className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition text-sm font-semibold"
@@ -1468,8 +1729,24 @@ INSTRUCTIONS:
                 {activeTab === 'bundles' && (
                   <div>
                     <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-xl font-semibold">Your Bundles</h3>
+                      <div className="flex items-center gap-3">
+                        <h3 className="text-xl font-semibold">Your Bundles</h3>
+                        {sanityBadge && sanityBadge.dataType === 'bundles' && (
+                          <span className={`px-3 py-1 rounded-full text-xs font-bold bg-${sanityBadge.color}-100 text-${sanityBadge.color}-800 flex items-center gap-1`}>
+                            {sanityBadge.icon} {sanityBadge.text} ({sanityBadge.score}/100)
+                          </span>
+                        )}
+                      </div>
                       <div className="flex gap-2">
+                        {bundles.length > 0 && (
+                          <button
+                            onClick={() => runAISanityCheck(bundles, 'bundles')}
+                            disabled={!apiKey || isCheckingSanity}
+                            className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 transition text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isCheckingSanity ? '🔍 Checking...' : '🧠 AI Sanity Check'}
+                          </button>
+                        )}
                         <button
                           onClick={() => initializeNewItem('bundle')}
                           className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-semibold"
@@ -2022,6 +2299,257 @@ INSTRUCTIONS:
                       </div>
                     )}
 
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* AI Sanity Check Report Modal */}
+            {showSanityReport && (
+              <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4 overflow-y-auto">
+                <div className="bg-white rounded-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto shadow-2xl my-8">
+                  
+                  {/* Header */}
+                  <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-8 text-white sticky top-0 z-10">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h2 className="text-4xl font-bold flex items-center mb-2">
+                          <span className="text-5xl mr-4">🧠</span>
+                          AI Sanity Check Report
+                        </h2>
+                        <p className="text-xl text-indigo-100">{sanityReport?.dataType || 'Data'} Quality Analysis</p>
+                      </div>
+                      <button
+                        onClick={() => setShowSanityReport(false)}
+                        className="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-2 transition text-2xl"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="p-8">
+                    {/* Loading State */}
+                    {isCheckingSanity && (
+                      <div className="text-center py-12">
+                        <div className="inline-block animate-spin text-6xl mb-4">🔍</div>
+                        <p className="text-xl font-semibold text-gray-700">Analyzing your data...</p>
+                        <p className="text-gray-500 mt-2">This may take a moment</p>
+                      </div>
+                    )}
+
+                    {/* Error State */}
+                    {sanityReport?.error && !isCheckingSanity && (
+                      <div className="bg-red-50 border-2 border-red-200 rounded-lg p-6">
+                        <h3 className="text-xl font-bold text-red-900 mb-2">❌ Analysis Failed</h3>
+                        <p className="text-red-700">{sanityReport.error}</p>
+                      </div>
+                    )}
+
+                    {/* Report Content */}
+                    {sanityReport && !sanityReport.error && !isCheckingSanity && (
+                      <div>
+                        {/* Quality Score */}
+                        <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-xl p-8 mb-6 border-2 border-purple-200">
+                          <div className="grid md:grid-cols-2 gap-6">
+                            <div className="text-center">
+                              <div className="text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-blue-600 mb-2">
+                                {sanityReport.qualityScore}/100
+                              </div>
+                              <div className="text-xl font-semibold text-gray-700">Quality Score</div>
+                              <div className="mt-2">
+                                {sanityReport.qualityScore >= 90 && <span className="text-green-600 font-bold">🟢 Excellent!</span>}
+                                {sanityReport.qualityScore >= 70 && sanityReport.qualityScore < 90 && <span className="text-yellow-600 font-bold">🟡 Good</span>}
+                                {sanityReport.qualityScore < 70 && <span className="text-red-600 font-bold">🔴 Needs Improvement</span>}
+                              </div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-teal-600 mb-2">
+                                {sanityReport.completeness}%
+                              </div>
+                              <div className="text-xl font-semibold text-gray-700">Data Completeness</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Statistics */}
+                        {sanityReport.statistics && (
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                            <div className="bg-white border-2 border-gray-200 rounded-lg p-4 text-center">
+                              <div className="text-3xl font-bold text-purple-600">{sanityReport.statistics.totalRows}</div>
+                              <div className="text-sm text-gray-600">Total Rows</div>
+                            </div>
+                            <div className="bg-white border-2 border-gray-200 rounded-lg p-4 text-center">
+                              <div className="text-3xl font-bold text-green-600">{sanityReport.statistics.completeRows}</div>
+                              <div className="text-sm text-gray-600">Complete Rows</div>
+                            </div>
+                            <div className="bg-white border-2 border-gray-200 rounded-lg p-4 text-center">
+                              <div className="text-3xl font-bold text-red-600">{sanityReport.statistics.issuesFound}</div>
+                              <div className="text-sm text-gray-600">Issues Found</div>
+                            </div>
+                            <div className="bg-white border-2 border-gray-200 rounded-lg p-4 text-center">
+                              <div className="text-3xl font-bold text-blue-600">{sanityReport.statistics.fieldsAnalyzed}</div>
+                              <div className="text-sm text-gray-600">Fields Analyzed</div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Critical Issues */}
+                        {sanityReport.critical && sanityReport.critical.length > 0 && (
+                          <div className="mb-6">
+                            <h3 className="text-2xl font-bold text-red-900 mb-4 flex items-center">
+                              <span className="text-3xl mr-2">🔴</span>
+                              Critical Issues ({sanityReport.critical.length})
+                            </h3>
+                            <div className="space-y-3">
+                              {sanityReport.critical.map((issue, idx) => (
+                                <div key={idx} className="bg-red-50 border-2 border-red-200 rounded-lg p-4">
+                                  <div className="flex justify-between items-start">
+                                    <div className="flex-1">
+                                      <div className="font-bold text-red-900 text-lg">{issue.issue}</div>
+                                      {issue.count && <div className="text-sm text-red-700 mt-1">Affected: {issue.count} items</div>}
+                                      <div className="text-sm text-red-700 mt-2">{issue.fix}</div>
+                                    </div>
+                                    {issue.fix && (
+                                      <button
+                                        onClick={() => applyAutoFix('fillEmpty', { column: issue.issue.split(':')[1]?.trim() })}
+                                        className="ml-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-semibold"
+                                      >
+                                        🔧 Fix
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Warnings */}
+                        {sanityReport.warnings && sanityReport.warnings.length > 0 && (
+                          <div className="mb-6">
+                            <h3 className="text-2xl font-bold text-yellow-900 mb-4 flex items-center">
+                              <span className="text-3xl mr-2">🟡</span>
+                              Warnings ({sanityReport.warnings.length})
+                            </h3>
+                            <div className="space-y-3">
+                              {sanityReport.warnings.map((warning, idx) => (
+                                <div key={idx} className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-4">
+                                  <div className="font-bold text-yellow-900">{warning.issue}</div>
+                                  {warning.count && <div className="text-sm text-yellow-700 mt-1">Count: {warning.count}</div>}
+                                  <div className="text-sm text-yellow-700 mt-2">{warning.suggestion}</div>
+                                  {warning.examples && (
+                                    <div className="text-xs text-yellow-600 mt-2 font-mono bg-yellow-100 p-2 rounded">
+                                      Examples: {warning.examples.join(', ')}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Suggestions */}
+                        {sanityReport.suggestions && sanityReport.suggestions.length > 0 && (
+                          <div className="mb-6">
+                            <h3 className="text-2xl font-bold text-blue-900 mb-4 flex items-center">
+                              <span className="text-3xl mr-2">💡</span>
+                              Suggestions ({sanityReport.suggestions.length})
+                            </h3>
+                            <div className="space-y-3">
+                              {sanityReport.suggestions.map((suggestion, idx) => (
+                                <div key={idx} className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
+                                  <div className="font-bold text-blue-900">{suggestion.title}</div>
+                                  <div className="text-sm text-blue-700 mt-2">{suggestion.description}</div>
+                                  <div className="flex gap-2 mt-2">
+                                    {suggestion.impact && (
+                                      <span className="text-xs px-2 py-1 bg-blue-200 text-blue-800 rounded-full font-semibold">
+                                        Impact: {suggestion.impact}
+                                      </span>
+                                    )}
+                                    {suggestion.effort && (
+                                      <span className="text-xs px-2 py-1 bg-blue-200 text-blue-800 rounded-full font-semibold">
+                                        Effort: {suggestion.effort}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Local Issues */}
+                        {sanityReport.localIssues && (
+                          <div className="bg-gray-50 border-2 border-gray-200 rounded-lg p-6 mb-6">
+                            <h4 className="font-bold text-gray-900 mb-3">🔧 Quick Fixes Available</h4>
+                            <div className="space-y-2">
+                              {sanityReport.localIssues.emptyCells && sanityReport.localIssues.emptyCells.length > 0 && (
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm">Empty cells in {sanityReport.localIssues.emptyCells.length} columns</span>
+                                  <button
+                                    onClick={() => sanityReport.localIssues.emptyCells.forEach(item => 
+                                      fillEmptyCells(item.column)
+                                    )}
+                                    className="px-3 py-1 bg-gray-600 text-white rounded text-xs font-semibold hover:bg-gray-700"
+                                  >
+                                    Fill All
+                                  </button>
+                                </div>
+                              )}
+                              {sanityReport.localIssues.duplicates > 0 && (
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm">{sanityReport.localIssues.duplicates} duplicate rows</span>
+                                  <button
+                                    onClick={removeDuplicateRows}
+                                    className="px-3 py-1 bg-gray-600 text-white rounded text-xs font-semibold hover:bg-gray-700"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              )}
+                              {sanityReport.localIssues.formatIssues && sanityReport.localIssues.formatIssues.length > 0 && (
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm">Price formatting issues in {sanityReport.localIssues.formatIssues.length} columns</span>
+                                  <button
+                                    onClick={() => sanityReport.localIssues.formatIssues.forEach(item => 
+                                      cleanPriceFormatting(item.column)
+                                    )}
+                                    className="px-3 py-1 bg-gray-600 text-white rounded text-xs font-semibold hover:bg-gray-700"
+                                  >
+                                    Clean All
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Actions */}
+                        <div className="flex gap-3">
+                          <button
+                            onClick={() => setShowSanityReport(false)}
+                            className="flex-1 px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 transition font-bold text-lg"
+                          >
+                            Close Report
+                          </button>
+                          <button
+                            onClick={() => {
+                              const reportText = JSON.stringify(sanityReport, null, 2);
+                              const blob = new Blob([reportText], { type: 'application/json' });
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement('a');
+                              a.href = url;
+                              a.download = `sanity-report-${Date.now()}.json`;
+                              a.click();
+                            }}
+                            className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold"
+                          >
+                            📥 Export Report
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
