@@ -818,18 +818,20 @@ INSTRUCTIONS:
                           ➕ Add Product
                         </button>
                         {products.length > 0 && (
-                          <button
-                            onClick={() => downloadCSV(products, 'products.csv')}
-                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-semibold"
-                          >
-                            💾 CSV
-                          </button>
-                          <button
-                            onClick={() => exportToExcel(products, 'products.xlsx', 'products')}
-                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-semibold"
-                          >
-                            📊 Excel
-                          </button>
+                          <>
+                            <button
+                              onClick={() => downloadCSV(products, 'products.csv')}
+                              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-semibold"
+                            >
+                              💾 CSV
+                            </button>
+                            <button
+                              onClick={() => exportToExcel(products, 'products.xlsx', 'products')}
+                              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-semibold"
+                            >
+                              📊 Excel
+                            </button>
+                          </>
                         )}
                       </div>
                     </div>
