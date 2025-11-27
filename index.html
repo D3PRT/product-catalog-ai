@@ -63,6 +63,193 @@
       const [sanityReport, setSanityReport] = useState(null);
       const [isCheckingSanity, setIsCheckingSanity] = useState(false);
       
+      // Dynamic prompt suggestions based on context
+      const [lastQueryType, setLastQueryType] = useState(null);
+      
+      const getSmartPrompts = () => {
+        const prompts = {
+          gettingStarted: [
+            "What file formats can I upload?",
+            "Show me an example structure",
+            "What can you help me with?",
+            "How do I get started?"
+          ],
+          bundleAnalysis: [
+            "Which bundles end this year?",
+            "Which bundles expire in the next 30 days?",
+            "Which bundles expire in the next 3 months?",
+            "Show all bundles with Netflix",
+            "Show all bundles with Disney+",
+            "Which bundles have the most products?",
+            "List bundles by price (high to low)",
+            "List bundles by price (low to high)",
+            "Show bundles cheaper than £50",
+            "Show bundles more expensive than £100",
+            "Which bundles are DOCSIS?",
+            "Which bundles are FTTP?",
+            "Show all BB Solus bundles",
+            "Show all BB + Stream bundles",
+            "Compare Flex vs non-Flex bundles",
+            "Which bundles were added this month?",
+            "Show bundles by category",
+            "Find duplicate bundles"
+          ],
+          productAnalysis: [
+            "Show all products by category",
+            "Which products aren't in any bundle?",
+            "List products with missing data",
+            "What's the average product price?",
+            "Show duplicate products",
+            "Which products are most expensive?",
+            "Which products are cheapest?",
+            "Show products added this month",
+            "Find products with no price",
+            "List all product categories"
+          ],
+          crossAnalysis: [
+            "Which products appear in the most bundles?",
+            "Suggest new bundle combinations",
+            "Find pricing inconsistencies",
+            "Compare bundle vs individual pricing",
+            "Which products should I add to bundles?",
+            "Find bundles with similar products",
+            "Show product overlap between bundles",
+            "Which bundles offer best value?"
+          ],
+          dataQuality: [
+            "Check my data for errors",
+            "Find rows with missing fields",
+            "Show me any duplicates",
+            "Validate all dates are correct",
+            "Find inconsistent pricing",
+            "Check for empty cells",
+            "Validate bundle IDs",
+            "Find formatting issues"
+          ],
+          reporting: [
+            "Give me a summary of all bundles",
+            "Give me a summary of all products",
+            "Create a pricing report",
+            "Show me bundles expiring each month",
+            "Break down bundles by network type",
+            "Break down bundles by category",
+            "Show monthly bundle count",
+            "Revenue analysis by bundle type"
+          ]
+        };
+        return prompts;
+      };
+
+      // Get dynamic follow-up prompts based on last query
+      const getFollowUpPrompts = () => {
+        if (!lastQueryType) return [];
+        
+        const followUps = {
+          'bundles_ending': [
+            "Export these to Excel",
+            "Which of these have Netflix?",
+            "Sort by price",
+            "Show more details for these",
+            "Which have the best value?",
+            "Compare the first 3"
+          ],
+          'bundles_netflix': [
+            "Which also have Disney+?",
+            "Sort by price",
+            "Which end this year?",
+            "Compare Netflix tiers across bundles",
+            "Which is cheapest with Netflix?"
+          ],
+          'bundles_price': [
+            "Filter by network type",
+            "Show only BB + Stream",
+            "Which include streaming?",
+            "Compare top 5",
+            "Show price trends"
+          ],
+          'products_category': [
+            "Which category has most products?",
+            "Show products not in bundles",
+            "Average price by category",
+            "Find gaps in categories"
+          ],
+          'data_quality': [
+            "Fix the empty cells",
+            "Show me the duplicates",
+            "How do I fix these issues?",
+            "Re-check after fixes",
+            "Export issues list"
+          ],
+          'general': [
+            "Tell me more",
+            "Export this table",
+            "Show as chart",
+            "Compare with other data",
+            "Summarize findings"
+          ]
+        };
+        
+        return followUps[lastQueryType] || followUps['general'];
+      };
+
+      // Detect query type for follow-up suggestions
+      const detectQueryType = (query) => {
+        const q = query.toLowerCase();
+        if (q.includes('end') && (q.includes('year') || q.includes('month') || q.includes('expire'))) return 'bundles_ending';
+        if (q.includes('netflix')) return 'bundles_netflix';
+        if (q.includes('price') || q.includes('cheap') || q.includes('expensive')) return 'bundles_price';
+        if (q.includes('category') || q.includes('categories')) return 'products_category';
+        if (q.includes('error') || q.includes('quality') || q.includes('missing') || q.includes('duplicate')) return 'data_quality';
+        return 'general';
+      };
+
+      // Get column-specific prompts based on actual data
+      const getColumnSpecificPrompts = () => {
+        const prompts = [];
+        
+        if (bundles.length > 0) {
+          const cols = Object.keys(bundles[0]);
+          
+          // Date columns
+          cols.forEach(col => {
+            if (col.toLowerCase().includes('date') || col.toLowerCase().includes('end') || col.toLowerCase().includes('expir')) {
+              prompts.push(`Show bundles by ${col}`);
+              prompts.push(`Which bundles have ${col} this year?`);
+              prompts.push(`Sort bundles by ${col}`);
+            }
+          });
+          
+          // Price columns
+          cols.forEach(col => {
+            if (col.toLowerCase().includes('price') || col.toLowerCase().includes('cost')) {
+              prompts.push(`Show bundles sorted by ${col}`);
+              prompts.push(`Average ${col} across all bundles`);
+              prompts.push(`Find bundles with ${col} under £50`);
+            }
+          });
+          
+          // Category/Type columns
+          cols.forEach(col => {
+            if (col.toLowerCase().includes('type') || col.toLowerCase().includes('category') || col.toLowerCase().includes('network')) {
+              prompts.push(`Break down bundles by ${col}`);
+              prompts.push(`Show unique values in ${col}`);
+              prompts.push(`Count bundles per ${col}`);
+            }
+          });
+          
+          // Name columns - look for specific products
+          const sampleValues = bundles.slice(0, 20).map(b => Object.values(b).join(' ')).join(' ').toLowerCase();
+          if (sampleValues.includes('netflix')) prompts.push('Show all bundles with Netflix');
+          if (sampleValues.includes('disney')) prompts.push('Show all bundles with Disney+');
+          if (sampleValues.includes('spotify')) prompts.push('Show all bundles with Spotify');
+          if (sampleValues.includes('flex')) prompts.push('Compare Flex vs non-Flex bundles');
+          if (sampleValues.includes('fibre')) prompts.push('Show all Fibre bundles');
+          if (sampleValues.includes('gig')) prompts.push('Show all Gig speed bundles');
+        }
+        
+        return [...new Set(prompts)].slice(0, 10); // Unique prompts, max 10
+      };
+
       // NEW FEATURES
       const [darkMode, setDarkMode] = useState(false);
       const [favoritePrompts, setFavoritePrompts] = useState([]);
@@ -717,6 +904,9 @@ NOW ANSWER THE USER'S QUESTION USING THE EXACT COLUMN NAMES FROM THEIR DATA:`;
         setInput("");
         addMessage('user', userMessage);
         setIsLoading(true);
+        
+        // Track query type for follow-up suggestions
+        setLastQueryType(detectQueryType(userMessage));
 
         try {
           const response = await callClaudeAPI(userMessage, false);
@@ -1070,63 +1260,92 @@ NOW ANSWER THE USER'S QUESTION USING THE EXACT COLUMN NAMES FROM THEIR DATA:`;
                     
                     <div className="h-96 overflow-y-auto mb-4 space-y-4 p-4 bg-gray-50 rounded-lg">
                       {messages.length === 0 ? (
-                        <div className="text-center text-gray-500 mt-12">
+                        <div className="text-center text-gray-500 mt-8">
                           <p className="text-lg mb-2">👋 Ask me anything about your catalog!</p>
                           <p className="text-sm mb-6 text-gray-400">
                             {products.length === 0 && bundles.length === 0 ? "Upload your products or bundles to get started" : `I have access to ${products.length} products and ${bundles.length} bundles`}
                           </p>
                           
-                          <div className="space-y-4 max-w-2xl mx-auto">
+                          <div className="space-y-4 max-w-3xl mx-auto text-left">
+                            {/* Getting Started - No Data */}
                             {products.length === 0 && bundles.length === 0 && (
-                              <div>
-                                <p className="text-xs font-semibold text-gray-400 mb-2">📁 GETTING STARTED</p>
-                                <div className="flex flex-wrap gap-2 justify-center">
-                                  {["What file formats can I upload?", "Show me an example structure", "What can you help with?"].map((q, i) => (
-                                    <button key={i} onClick={() => setInput(q)} className="px-4 py-2 bg-white text-purple-700 rounded-full text-sm hover:bg-purple-50 shadow-sm border border-purple-200">{q}</button>
+                              <div className="bg-white rounded-lg p-4 border border-gray-200">
+                                <p className="text-xs font-semibold text-gray-500 mb-2">📁 GETTING STARTED</p>
+                                <div className="flex flex-wrap gap-2">
+                                  {getSmartPrompts().gettingStarted.map((q, i) => (
+                                    <button key={i} onClick={() => setInput(q)} className="px-3 py-1.5 bg-gray-50 text-gray-700 rounded-full text-xs hover:bg-gray-100 border border-gray-200">{q}</button>
                                   ))}
                                 </div>
                               </div>
                             )}
                             
+                            {/* Column-Specific Prompts - Dynamic based on data */}
+                            {bundles.length > 0 && getColumnSpecificPrompts().length > 0 && (
+                              <div className="bg-white rounded-lg p-4 border border-purple-200">
+                                <p className="text-xs font-semibold text-purple-600 mb-2">✨ SUGGESTED FOR YOUR DATA</p>
+                                <div className="flex flex-wrap gap-2">
+                                  {getColumnSpecificPrompts().map((q, i) => (
+                                    <button key={i} onClick={() => setInput(q)} className="px-3 py-1.5 bg-purple-50 text-purple-700 rounded-full text-xs hover:bg-purple-100 border border-purple-200">{q}</button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* Bundle Analysis */}
                             {bundles.length > 0 && (
-                              <div>
-                                <p className="text-xs font-semibold text-purple-500 mb-2">🎁 BUNDLE ANALYSIS</p>
-                                <div className="flex flex-wrap gap-2 justify-center">
-                                  {["Which bundles end this year?", "Show all bundles with Netflix", "Which bundles have the most products?", "List bundles by price", "Bundles expiring in 3 months"].map((q, i) => (
-                                    <button key={i} onClick={() => setInput(q)} className="px-4 py-2 bg-white text-purple-700 rounded-full text-sm hover:bg-purple-50 shadow-sm border border-purple-200">{q}</button>
+                              <div className="bg-white rounded-lg p-4 border border-purple-200">
+                                <p className="text-xs font-semibold text-purple-600 mb-2">🎁 BUNDLE ANALYSIS</p>
+                                <div className="flex flex-wrap gap-2">
+                                  {getSmartPrompts().bundleAnalysis.slice(0, 12).map((q, i) => (
+                                    <button key={i} onClick={() => setInput(q)} className="px-3 py-1.5 bg-purple-50 text-purple-700 rounded-full text-xs hover:bg-purple-100 border border-purple-200">{q}</button>
                                   ))}
                                 </div>
                               </div>
                             )}
                             
+                            {/* Product Analysis */}
                             {products.length > 0 && (
-                              <div>
-                                <p className="text-xs font-semibold text-blue-500 mb-2">📦 PRODUCT ANALYSIS</p>
-                                <div className="flex flex-wrap gap-2 justify-center">
-                                  {["Products by category", "Products not in any bundle", "Products with missing data", "Average product price", "Show duplicates"].map((q, i) => (
-                                    <button key={i} onClick={() => setInput(q)} className="px-4 py-2 bg-white text-blue-700 rounded-full text-sm hover:bg-blue-50 shadow-sm border border-blue-200">{q}</button>
+                              <div className="bg-white rounded-lg p-4 border border-blue-200">
+                                <p className="text-xs font-semibold text-blue-600 mb-2">📦 PRODUCT ANALYSIS</p>
+                                <div className="flex flex-wrap gap-2">
+                                  {getSmartPrompts().productAnalysis.map((q, i) => (
+                                    <button key={i} onClick={() => setInput(q)} className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-full text-xs hover:bg-blue-100 border border-blue-200">{q}</button>
                                   ))}
                                 </div>
                               </div>
                             )}
                             
+                            {/* Cross Analysis */}
                             {products.length > 0 && bundles.length > 0 && (
-                              <div>
-                                <p className="text-xs font-semibold text-green-500 mb-2">🔗 CROSS ANALYSIS</p>
-                                <div className="flex flex-wrap gap-2 justify-center">
-                                  {["Products in most bundles", "Suggest new bundles", "Find pricing issues", "Bundle vs individual pricing"].map((q, i) => (
-                                    <button key={i} onClick={() => setInput(q)} className="px-4 py-2 bg-white text-green-700 rounded-full text-sm hover:bg-green-50 shadow-sm border border-green-200">{q}</button>
+                              <div className="bg-white rounded-lg p-4 border border-green-200">
+                                <p className="text-xs font-semibold text-green-600 mb-2">🔗 CROSS ANALYSIS</p>
+                                <div className="flex flex-wrap gap-2">
+                                  {getSmartPrompts().crossAnalysis.map((q, i) => (
+                                    <button key={i} onClick={() => setInput(q)} className="px-3 py-1.5 bg-green-50 text-green-700 rounded-full text-xs hover:bg-green-100 border border-green-200">{q}</button>
                                   ))}
                                 </div>
                               </div>
                             )}
                             
+                            {/* Data Quality */}
                             {(products.length > 0 || bundles.length > 0) && (
-                              <div>
-                                <p className="text-xs font-semibold text-orange-500 mb-2">🔍 DATA QUALITY</p>
-                                <div className="flex flex-wrap gap-2 justify-center">
-                                  {["Check for errors", "Find missing fields", "Show duplicates", "Validate dates"].map((q, i) => (
-                                    <button key={i} onClick={() => setInput(q)} className="px-4 py-2 bg-white text-orange-700 rounded-full text-sm hover:bg-orange-50 shadow-sm border border-orange-200">{q}</button>
+                              <div className="bg-white rounded-lg p-4 border border-orange-200">
+                                <p className="text-xs font-semibold text-orange-600 mb-2">🔍 DATA QUALITY</p>
+                                <div className="flex flex-wrap gap-2">
+                                  {getSmartPrompts().dataQuality.map((q, i) => (
+                                    <button key={i} onClick={() => setInput(q)} className="px-3 py-1.5 bg-orange-50 text-orange-700 rounded-full text-xs hover:bg-orange-100 border border-orange-200">{q}</button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* Reporting */}
+                            {(products.length > 0 || bundles.length > 0) && (
+                              <div className="bg-white rounded-lg p-4 border border-indigo-200">
+                                <p className="text-xs font-semibold text-indigo-600 mb-2">📊 REPORTS</p>
+                                <div className="flex flex-wrap gap-2">
+                                  {getSmartPrompts().reporting.map((q, i) => (
+                                    <button key={i} onClick={() => setInput(q)} className="px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-full text-xs hover:bg-indigo-100 border border-indigo-200">{q}</button>
                                   ))}
                                 </div>
                               </div>
@@ -1167,18 +1386,33 @@ NOW ANSWER THE USER'S QUESTION USING THE EXACT COLUMN NAMES FROM THEIR DATA:`;
                     </form>
                     
                     {(products.length > 0 || bundles.length > 0) && messages.length > 0 && (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <span className="text-xs text-gray-400 self-center">Quick:</span>
-                        {bundles.length > 0 && (
-                          <>
-                            <button onClick={() => setInput("Which bundles end this year?")} className="px-3 py-1 bg-purple-50 text-purple-700 rounded-full text-xs hover:bg-purple-100 border border-purple-200">Bundles ending 2025</button>
-                            <button onClick={() => setInput("Show all bundles in a table")} className="px-3 py-1 bg-purple-50 text-purple-700 rounded-full text-xs hover:bg-purple-100 border border-purple-200">All bundles table</button>
-                          </>
+                      <div className="mt-3 space-y-2">
+                        {/* Follow-up suggestions based on last query */}
+                        {lastQueryType && getFollowUpPrompts().length > 0 && (
+                          <div className="flex flex-wrap gap-2 items-center">
+                            <span className="text-xs text-purple-600 font-semibold">💡 Follow-up:</span>
+                            {getFollowUpPrompts().map((q, i) => (
+                              <button key={i} onClick={() => setInput(q)} className="px-3 py-1 bg-purple-50 text-purple-700 rounded-full text-xs hover:bg-purple-100 border border-purple-200">{q}</button>
+                            ))}
+                          </div>
                         )}
-                        {products.length > 0 && (
-                          <button onClick={() => setInput("Products not in any bundle")} className="px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-xs hover:bg-blue-100 border border-blue-200">Unused products</button>
-                        )}
-                        <button onClick={() => setInput("Check for data errors")} className="px-3 py-1 bg-orange-50 text-orange-700 rounded-full text-xs hover:bg-orange-100 border border-orange-200">Check errors</button>
+                        
+                        {/* Quick actions */}
+                        <div className="flex flex-wrap gap-2 items-center">
+                          <span className="text-xs text-gray-400">Quick:</span>
+                          {bundles.length > 0 && (
+                            <>
+                              <button onClick={() => setInput("Which bundles end this year?")} className="px-3 py-1 bg-gray-50 text-gray-600 rounded-full text-xs hover:bg-gray-100 border border-gray-200">Ending 2025</button>
+                              <button onClick={() => setInput("Show all bundles in a table")} className="px-3 py-1 bg-gray-50 text-gray-600 rounded-full text-xs hover:bg-gray-100 border border-gray-200">All bundles</button>
+                              <button onClick={() => setInput("Show bundles with Netflix")} className="px-3 py-1 bg-gray-50 text-gray-600 rounded-full text-xs hover:bg-gray-100 border border-gray-200">Netflix bundles</button>
+                            </>
+                          )}
+                          {products.length > 0 && (
+                            <button onClick={() => setInput("Products not in any bundle")} className="px-3 py-1 bg-gray-50 text-gray-600 rounded-full text-xs hover:bg-gray-100 border border-gray-200">Unused products</button>
+                          )}
+                          <button onClick={() => setInput("Check for data errors")} className="px-3 py-1 bg-gray-50 text-gray-600 rounded-full text-xs hover:bg-gray-100 border border-gray-200">Check errors</button>
+                          <button onClick={() => setInput("Give me a summary")} className="px-3 py-1 bg-gray-50 text-gray-600 rounded-full text-xs hover:bg-gray-100 border border-gray-200">Summary</button>
+                        </div>
                       </div>
                     )}
                   </div>
