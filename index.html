@@ -426,6 +426,8 @@
       const [compareItems, setCompareItems] = useState([]);
       const [selectedItems, setSelectedItems] = useState({ products: [], bundles: [] });
       const [showCharts, setShowCharts] = useState(false);
+      const [showOnboarding, setShowOnboarding] = useState(true);
+      const [onboardingStep, setOnboardingStep] = useState(1);
       
       const messagesEndRef = useRef(null);
       const searchInputRef = useRef(null);
@@ -609,6 +611,10 @@
         
         if (storedDarkMode === 'true') setDarkMode(true);
         if (storedFavorites) setFavoritePrompts(JSON.parse(storedFavorites));
+        
+        // Check if onboarding completed
+        const onboardingComplete = localStorage.getItem('onboarding_complete');
+        if (onboardingComplete === 'true') setShowOnboarding(false);
       }, []);
 
       // Toggle dark mode
@@ -616,6 +622,199 @@
         const newMode = !darkMode;
         setDarkMode(newMode);
         localStorage.setItem('dark_mode', newMode.toString());
+      };
+
+      // Complete onboarding
+      const completeOnboarding = () => {
+        setShowOnboarding(false);
+        localStorage.setItem('onboarding_complete', 'true');
+      };
+
+      const resetOnboarding = () => {
+        setShowOnboarding(true);
+        setOnboardingStep(1);
+        localStorage.removeItem('onboarding_complete');
+      };
+
+      // Onboarding Wizard Component
+      const OnboardingWizard = () => {
+        const steps = [
+          {
+            title: "Welcome to AI Product Catalog Manager! 👋",
+            description: "This tool helps you manage, analyze, and get insights from your product and bundle data using AI.",
+            icon: "🚀",
+            features: [
+              "📊 Upload and analyze your product/bundle spreadsheets",
+              "🤖 Ask AI questions about your data in plain English",
+              "📈 Visualize data with charts and comparisons",
+              "✅ Check data quality and find errors automatically"
+            ]
+          },
+          {
+            title: "Step 1: Upload Your Data 📁",
+            description: "Start by uploading your Products and/or Bundles files. We support Excel (.xlsx) and CSV files.",
+            icon: "📁",
+            tips: [
+              "💡 Products = Individual items (e.g., Netflix, Broadband, TV packages)",
+              "💡 Bundles = Combinations of products sold together",
+              "💡 Your file should have headers in the first row",
+              "💡 Common columns: ID, Name, Price, Category, End Date"
+            ],
+            action: "upload"
+          },
+          {
+            title: "Step 2: Ask the AI Anything 💬",
+            description: "Once your data is loaded, you can ask questions in plain English. The AI understands your data!",
+            icon: "🤖",
+            examples: [
+              "\"Which bundles expire this year?\"",
+              "\"Show all bundles with Netflix\"",
+              "\"Find pricing errors in my data\"",
+              "\"Compare M500 vs Gig1 bundles\"",
+              "\"What products aren't in any bundle?\""
+            ]
+          },
+          {
+            title: "Step 3: Explore Features 🎯",
+            description: "Use the tabs and tools to manage your catalog effectively.",
+            icon: "✨",
+            features: [
+              "📊 Charts - Visualize pricing and categories",
+              "⚖️ Compare - Side-by-side bundle comparison",
+              "🔍 Search - Find anything instantly (Cmd+K)",
+              "🧠 AI Sanity Check - Automatic data validation",
+              "📥 Export - Download tables to Excel/CSV"
+            ]
+          },
+          {
+            title: "You're Ready! 🎉",
+            description: "Start by uploading a file, or try asking the AI a question. Need help? Click any suggested prompt!",
+            icon: "🎉",
+            quickStart: true
+          }
+        ];
+
+        const currentStep = steps[onboardingStep - 1];
+
+        return (
+          <div className="bg-white rounded-xl shadow-2xl border-2 border-purple-200 overflow-hidden mb-6">
+            {/* Progress bar */}
+            <div className="bg-gradient-to-r from-purple-500 to-blue-500 p-1">
+              <div className="flex justify-between px-4">
+                {steps.map((_, idx) => (
+                  <div key={idx} className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${idx + 1 <= onboardingStep ? 'bg-white text-purple-600' : 'bg-purple-400 text-white'}`}>
+                    {idx + 1 <= onboardingStep ? '✓' : idx + 1}
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            <div className="p-8">
+              {/* Header */}
+              <div className="text-center mb-6">
+                <div className="text-6xl mb-4">{currentStep.icon}</div>
+                <h2 className="text-2xl font-bold text-gray-800 mb-2">{currentStep.title}</h2>
+                <p className="text-gray-600">{currentStep.description}</p>
+              </div>
+
+              {/* Content based on step */}
+              {currentStep.features && (
+                <div className="bg-purple-50 rounded-lg p-4 mb-6">
+                  <div className="grid md:grid-cols-2 gap-3">
+                    {currentStep.features.map((feature, idx) => (
+                      <div key={idx} className="flex items-center gap-2 text-gray-700">
+                        <span>{feature}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {currentStep.tips && (
+                <div className="bg-blue-50 rounded-lg p-4 mb-6">
+                  <p className="font-semibold text-blue-800 mb-2">💡 Tips:</p>
+                  <ul className="space-y-2">
+                    {currentStep.tips.map((tip, idx) => (
+                      <li key={idx} className="text-blue-700 text-sm">{tip}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {currentStep.examples && (
+                <div className="bg-green-50 rounded-lg p-4 mb-6">
+                  <p className="font-semibold text-green-800 mb-2">💬 Try asking:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {currentStep.examples.map((example, idx) => (
+                      <span key={idx} className="px-3 py-1 bg-white text-green-700 rounded-full text-sm border border-green-200">{example}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {currentStep.action === 'upload' && (
+                <div className="bg-amber-50 rounded-lg p-4 mb-6 border-2 border-dashed border-amber-300">
+                  <p className="text-center text-amber-800 font-medium">
+                    👆 Use the "Upload Your Data" section above to add your files
+                  </p>
+                </div>
+              )}
+
+              {currentStep.quickStart && (
+                <div className="grid md:grid-cols-3 gap-4 mb-6">
+                  <button onClick={() => { completeOnboarding(); document.querySelector('input[type="file"]')?.click(); }} className="p-4 bg-purple-100 rounded-lg hover:bg-purple-200 transition text-center">
+                    <div className="text-3xl mb-2">📁</div>
+                    <div className="font-semibold text-purple-800">Upload Data</div>
+                    <div className="text-xs text-purple-600">Start with your files</div>
+                  </button>
+                  <button onClick={() => { completeOnboarding(); setInput("What can you help me with?"); }} className="p-4 bg-blue-100 rounded-lg hover:bg-blue-200 transition text-center">
+                    <div className="text-3xl mb-2">🤖</div>
+                    <div className="font-semibold text-blue-800">Ask AI</div>
+                    <div className="text-xs text-blue-600">Get help from AI</div>
+                  </button>
+                  <button onClick={completeOnboarding} className="p-4 bg-green-100 rounded-lg hover:bg-green-200 transition text-center">
+                    <div className="text-3xl mb-2">🎯</div>
+                    <div className="font-semibold text-green-800">Explore</div>
+                    <div className="text-xs text-green-600">Look around first</div>
+                  </button>
+                </div>
+              )}
+
+              {/* Navigation */}
+              <div className="flex justify-between items-center pt-4 border-t border-gray-200">
+                <button 
+                  onClick={() => setOnboardingStep(Math.max(1, onboardingStep - 1))}
+                  className={`px-4 py-2 rounded-lg font-medium ${onboardingStep === 1 ? 'text-gray-400 cursor-not-allowed' : 'text-purple-600 hover:bg-purple-50'}`}
+                  disabled={onboardingStep === 1}
+                >
+                  ← Back
+                </button>
+                
+                <div className="flex gap-2">
+                  <button onClick={completeOnboarding} className="px-4 py-2 text-gray-500 hover:text-gray-700 text-sm">
+                    Skip tutorial
+                  </button>
+                  
+                  {onboardingStep < steps.length ? (
+                    <button 
+                      onClick={() => setOnboardingStep(onboardingStep + 1)}
+                      className="px-6 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg font-semibold hover:from-purple-700 hover:to-blue-700"
+                    >
+                      Next →
+                    </button>
+                  ) : (
+                    <button 
+                      onClick={completeOnboarding}
+                      className="px-6 py-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg font-semibold hover:from-green-700 hover:to-emerald-700"
+                    >
+                      Get Started! 🚀
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
       };
 
       // Favorite prompts
@@ -935,9 +1134,11 @@ Return ONLY valid JSON:
               if (type === 'products') {
                 setProducts(sheetData);
                 addMessage('system', `✅ Loaded ${sheetData.length} products from Excel`);
+                if (showOnboarding) completeOnboarding();
               } else {
                 setBundles(sheetData);
                 addMessage('system', `✅ Loaded ${sheetData.length} bundles from Excel`);
+                if (showOnboarding) completeOnboarding();
               }
             } catch (error) {
               addMessage('system', `❌ Error reading Excel: ${error.message}`);
@@ -954,9 +1155,11 @@ Return ONLY valid JSON:
             if (type === 'products') {
               setProducts(results.data);
               addMessage('system', `✅ Loaded ${results.data.length} products`);
+              if (showOnboarding) completeOnboarding();
             } else {
               setBundles(results.data);
               addMessage('system', `✅ Loaded ${results.data.length} bundles`);
+              if (showOnboarding) completeOnboarding();
             }
           },
           error: (error) => addMessage('system', `❌ Error: ${error.message}`)
@@ -1366,8 +1569,16 @@ NOW ANSWER THE USER'S QUESTION USING THE EXACT COLUMN NAMES FROM THEIR DATA:`;
             {/* Status Bar */}
             <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-6 flex items-center justify-between">
               <span className="text-green-800 text-sm font-medium">✅ AI Enabled - Secure Connection</span>
-              <span className="text-xs text-green-600">Today: {new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</span>
+              <div className="flex items-center gap-4">
+                <button onClick={resetOnboarding} className="text-xs text-purple-600 hover:text-purple-800 font-medium">📖 Show Tutorial</button>
+                <span className="text-xs text-green-600">Today: {new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</span>
+              </div>
             </div>
+
+            {/* Onboarding Wizard - Show when no data and onboarding not complete */}
+            {showOnboarding && products.length === 0 && bundles.length === 0 && (
+              <OnboardingWizard />
+            )}
 
             {/* File Upload */}
             <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
