@@ -1838,7 +1838,6 @@ COLUMNS: ${bundleColumns.join(' | ')}`;
               messages: [{ role: "user", content: systemPrompt }],
               max_tokens: useExtendedThinking ? 4000 : 2000
             })
-            })
           });
 
           if (response.status === 401) {
