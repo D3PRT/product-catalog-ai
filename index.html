@@ -76,6 +76,159 @@
       const chartRef = useRef(null);
       const priceChartRef = useRef(null);
 
+      // Parse and render markdown tables
+      const parseMarkdownTable = (tableText) => {
+        const lines = tableText.trim().split('\n').filter(line => line.trim());
+        if (lines.length < 2) return null;
+        
+        const parseRow = (row) => {
+          return row.split('|').map(cell => cell.trim()).filter(cell => cell && !cell.match(/^[-:]+$/));
+        };
+        
+        const headers = parseRow(lines[0]);
+        if (headers.length === 0) return null;
+        
+        // Skip separator line
+        const dataStartIndex = lines[1].includes('---') ? 2 : 1;
+        const rows = lines.slice(dataStartIndex).map(parseRow).filter(row => row.length > 0);
+        
+        return { headers, rows };
+      };
+
+      const exportTableToCSV = (tableData, filename = 'table-export.csv') => {
+        if (!tableData) return;
+        const csvContent = [
+          tableData.headers.join(','),
+          ...tableData.rows.map(row => row.map(cell => `"${cell}"`).join(','))
+        ].join('\n');
+        
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        addMessage('system', `✅ Table exported to ${filename}`);
+      };
+
+      const exportTableToExcel = (tableData, filename = 'table-export.xlsx') => {
+        if (!tableData) return;
+        const wsData = [tableData.headers, ...tableData.rows];
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Data');
+        XLSX.writeFile(wb, filename);
+        addMessage('system', `✅ Table exported to ${filename}`);
+      };
+
+      const renderFormattedMessage = (content) => {
+        // Split content into parts (tables and text)
+        const parts = [];
+        let currentText = '';
+        const lines = content.split('\n');
+        let tableLines = [];
+        let inTable = false;
+
+        lines.forEach((line, idx) => {
+          const isTableLine = line.trim().startsWith('|') && line.trim().endsWith('|');
+          
+          if (isTableLine) {
+            if (!inTable && currentText.trim()) {
+              parts.push({ type: 'text', content: currentText });
+              currentText = '';
+            }
+            inTable = true;
+            tableLines.push(line);
+          } else {
+            if (inTable && tableLines.length > 0) {
+              parts.push({ type: 'table', content: tableLines.join('\n') });
+              tableLines = [];
+              inTable = false;
+            }
+            currentText += line + '\n';
+          }
+        });
+
+        // Handle remaining content
+        if (tableLines.length > 0) {
+          parts.push({ type: 'table', content: tableLines.join('\n') });
+        }
+        if (currentText.trim()) {
+          parts.push({ type: 'text', content: currentText });
+        }
+
+        return (
+          <div className="space-y-4">
+            {parts.map((part, idx) => {
+              if (part.type === 'table') {
+                const tableData = parseMarkdownTable(part.content);
+                if (!tableData) return <pre key={idx} className="whitespace-pre-wrap font-sans text-sm">{part.content}</pre>;
+                
+                return (
+                  <div key={idx} className="border border-gray-200 rounded-lg overflow-hidden">
+                    <div className="bg-gray-50 px-3 py-2 flex justify-between items-center border-b border-gray-200">
+                      <span className="text-xs font-semibold text-gray-500">{tableData.rows.length} rows</span>
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => exportTableToCSV(tableData)} 
+                          className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 font-medium"
+                        >
+                          📥 CSV
+                        </button>
+                        <button 
+                          onClick={() => exportTableToExcel(tableData)} 
+                          className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200 font-medium"
+                        >
+                          📊 Excel
+                        </button>
+                      </div>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-purple-50">
+                          <tr>
+                            {tableData.headers.map((header, hIdx) => (
+                              <th key={hIdx} className="px-3 py-2 text-left font-semibold text-purple-900 border-b border-purple-200 whitespace-nowrap">
+                                {header}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {tableData.rows.map((row, rIdx) => (
+                            <tr key={rIdx} className={`${rIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-purple-50`}>
+                              {row.map((cell, cIdx) => (
+                                <td key={cIdx} className="px-3 py-2 border-b border-gray-100 whitespace-nowrap">
+                                  {cell}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              } else {
+                // Render text with basic markdown formatting
+                const formattedText = part.content
+                  .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                  .replace(/\*(.+?)\*/g, '<em>$1</em>')
+                  .replace(/`(.+?)`/g, '<code class="bg-gray-100 px-1 rounded text-purple-700">$1</code>');
+                
+                return (
+                  <div 
+                    key={idx} 
+                    className="text-sm whitespace-pre-wrap" 
+                    dangerouslySetInnerHTML={{ __html: formattedText }}
+                  />
+                );
+              }
+            })}
+          </div>
+        );
+      };
+
       const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
       };
@@ -968,8 +1121,8 @@ NOW ANSWER THE USER'S QUESTION WITH CLEAR TABLES AND SPECIFIC DATA:`;
                       ) : (
                         messages.map((msg, idx) => (
                           <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                            <div className={`max-w-3xl px-4 py-3 rounded-lg shadow-md ${msg.role === 'user' ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white' : msg.role === 'system' ? 'bg-yellow-50 text-yellow-800 border border-yellow-200' : 'bg-white text-gray-800 border border-gray-200'}`}>
-                              <pre className="whitespace-pre-wrap font-sans text-sm">{msg.content}</pre>
+                            <div className={`max-w-4xl px-4 py-3 rounded-lg shadow-md ${msg.role === 'user' ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white' : msg.role === 'system' ? 'bg-yellow-50 text-yellow-800 border border-yellow-200' : 'bg-white text-gray-800 border border-gray-200'}`}>
+                              {msg.role === 'assistant' ? renderFormattedMessage(msg.content) : <pre className="whitespace-pre-wrap font-sans text-sm">{msg.content}</pre>}
                               {msg.role === 'user' && (
                                 <button onClick={() => toggleFavoritePrompt(msg.content)} className="mt-2 text-xs opacity-70 hover:opacity-100" title={favoritePrompts.includes(msg.content) ? 'Remove from favorites' : 'Add to favorites'}>
                                   {favoritePrompts.includes(msg.content) ? '⭐' : '☆'} Favorite
