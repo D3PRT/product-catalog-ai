@@ -657,6 +657,50 @@
       // Add-on Impact Viewer state
       const [showAddonViewer, setShowAddonViewer] = useState(false);
       const [selectedProductCode, setSelectedProductCode] = useState('');
+      
+      // Knowledge Base state
+      const [showKnowledgeBase, setShowKnowledgeBase] = useState(false);
+      const [catalogueKnowledge, setCatalogueKnowledge] = useState({
+        // Auto-learned knowledge
+        learned: {
+          columnMeanings: {},
+          productCodePatterns: {},
+          bundleTypes: {},
+          networkTypes: {},
+          pricingStructure: {},
+          relationships: {},
+          commonTerms: {}
+        },
+        // User-defined business rules
+        businessRules: [
+          { id: 1, category: 'Products', rule: 'Product codes starting with P are core products (e.g., P106879 = M125 Fibre Broadband)' },
+          { id: 2, category: 'Products', rule: 'Product codes starting with D are discount codes applied to bundles' },
+          { id: 3, category: 'Products', rule: 'Product codes starting with A are add-on products that can be included' },
+          { id: 4, category: 'Products', rule: 'Product codes starting with S are SIM products (e.g., S2000040 = 40GB Plus SIM)' },
+          { id: 5, category: 'Bundles', rule: 'Bundles_RGU contains the core product codes that make up the bundle' },
+          { id: 6, category: 'Bundles', rule: 'Additional_bundle_codes contains supplementary product/discount codes' },
+          { id: 7, category: 'Bundles', rule: 'Included_Addon lists add-ons that come FREE with the bundle' },
+          { id: 8, category: 'Bundles', rule: 'Excluded_Addon lists add-ons that CANNOT be added to this bundle' },
+          { id: 9, category: 'Pricing', rule: 'Discounted_Monthly_Price_1 is the price for the first X months (Discounted_Length_1)' },
+          { id: 10, category: 'Pricing', rule: 'Discounted_Monthly_Price_2 is the price for the next period (Discounted_Length_2)' },
+          { id: 11, category: 'Pricing', rule: 'On_going_Monthly_Price is the standard price after promotional periods end' },
+          { id: 12, category: 'Network', rule: 'DOCSIS is standard cable broadband technology' },
+          { id: 13, category: 'Network', rule: 'XGS (XGS-PON) is fibre technology offering symmetric upload/download speeds' },
+          { id: 14, category: 'Network', rule: 'Alt_Network_BundleId links to the equivalent bundle on alternative network type' },
+          { id: 15, category: 'Bundle Types', rule: 'Volt bundles include a mobile SIM component' },
+          { id: 16, category: 'Bundle Types', rule: 'Dual bundles typically include Broadband + TV' },
+          { id: 17, category: 'Bundle Types', rule: 'Triple bundles include Broadband + TV + Phone' },
+          { id: 18, category: 'Bundle Types', rule: 'Stream/Flex bundles include streaming services' },
+          { id: 19, category: 'TV', rule: 'Mega TV is the base TV package' },
+          { id: 20, category: 'TV', rule: 'Sky Sports HD and Sky Cinema are premium TV add-ons' },
+          { id: 21, category: 'Tiers', rule: 'Tier (Classic/Plus) affects which SIM data allowances are included' },
+          { id: 22, category: 'TMI', rule: 'TMI columns (Broadband_TMI, Phone_TMI, TV_TMI, SIM_TMI) are internal tariff identifiers' }
+        ],
+        // Custom notes added by user
+        customNotes: [],
+        // Last analysis timestamp
+        lastAnalyzed: null
+      });
       const [impactSearchTerm, setImpactSearchTerm] = useState('');
       const [impactResults, setImpactResults] = useState(null);
       const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -1177,6 +1221,261 @@
       };
       
       // Get all unique product codes for autocomplete
+      // ========== AUTO-LEARNING SYSTEM ==========
+      const learnFromCatalogue = (productsData, bundlesData) => {
+        const learned = {
+          columnMeanings: {},
+          productCodePatterns: {},
+          bundleTypes: {},
+          networkTypes: {},
+          pricingStructure: {},
+          relationships: {},
+          commonTerms: {},
+          statistics: {}
+        };
+        
+        // === LEARN PRODUCT CODE PATTERNS ===
+        const codePrefixes = { P: [], D: [], A: [], S: [] };
+        productsData.forEach(p => {
+          const code = String(p.Code || '');
+          const prefix = code.charAt(0);
+          if (codePrefixes[prefix]) {
+            codePrefixes[prefix].push({ code, name: p.Name, type: p.Type, category: p.Category });
+          }
+        });
+        
+        learned.productCodePatterns = {
+          P: { count: codePrefixes.P.length, meaning: 'Core Products', examples: codePrefixes.P.slice(0, 5).map(p => `${p.code} (${p.name})`) },
+          D: { count: codePrefixes.D.length, meaning: 'Discount Codes', examples: codePrefixes.D.slice(0, 5).map(p => `${p.code} (${p.name})`) },
+          A: { count: codePrefixes.A.length, meaning: 'Add-on Products', examples: codePrefixes.A.slice(0, 5).map(p => `${p.code} (${p.name})`) },
+          S: { count: codePrefixes.S.length, meaning: 'SIM Products', examples: codePrefixes.S.slice(0, 5).map(p => `${p.code} (${p.name})`) }
+        };
+        
+        // === LEARN PRODUCT TYPES & CATEGORIES ===
+        const productTypes = {};
+        const productCategories = {};
+        productsData.forEach(p => {
+          if (p.Type) productTypes[p.Type] = (productTypes[p.Type] || 0) + 1;
+          if (p.Category) productCategories[p.Category] = (productCategories[p.Category] || 0) + 1;
+        });
+        learned.productTypes = productTypes;
+        learned.productCategories = productCategories;
+        
+        // === LEARN BUNDLE PATTERNS ===
+        const bundleNamePatterns = {
+          volt: [], fibre: [], stream: [], flex: [], dual: [], triple: [],
+          sport: [], cinema: [], entertainment: [], netflix: [], sky: []
+        };
+        
+        bundlesData.forEach(b => {
+          const name = String(b.Name || '').toLowerCase();
+          Object.keys(bundleNamePatterns).forEach(pattern => {
+            if (name.includes(pattern)) {
+              bundleNamePatterns[pattern].push({ id: b.ID, name: b.Name, price: b.On_going_Monthly_Price });
+            }
+          });
+        });
+        
+        learned.bundleTypes = {};
+        Object.entries(bundleNamePatterns).forEach(([pattern, bundles]) => {
+          if (bundles.length > 0) {
+            learned.bundleTypes[pattern] = {
+              count: bundles.length,
+              avgPrice: bundles.reduce((sum, b) => sum + (parseFloat(b.price) || 0), 0) / bundles.length,
+              examples: bundles.slice(0, 3).map(b => b.name)
+            };
+          }
+        });
+        
+        // === LEARN NETWORK TYPES ===
+        const networkTypes = {};
+        bundlesData.forEach(b => {
+          const net = b.BB_Network_Type;
+          if (net) {
+            if (!networkTypes[net]) networkTypes[net] = { count: 0, speeds: new Set(), bundles: [] };
+            networkTypes[net].count++;
+            if (b.BB_Speed_Mbs) networkTypes[net].speeds.add(b.BB_Speed_Mbs);
+            if (networkTypes[net].bundles.length < 3) networkTypes[net].bundles.push(b.Name);
+          }
+        });
+        
+        learned.networkTypes = {};
+        Object.entries(networkTypes).forEach(([net, data]) => {
+          learned.networkTypes[net] = {
+            count: data.count,
+            speeds: Array.from(data.speeds).sort((a, b) => a - b),
+            examples: data.bundles
+          };
+        });
+        
+        // === LEARN PRICING STRUCTURE ===
+        const prices = bundlesData
+          .map(b => parseFloat(b.On_going_Monthly_Price))
+          .filter(p => !isNaN(p) && p > 0)
+          .sort((a, b) => a - b);
+        
+        if (prices.length > 0) {
+          learned.pricingStructure = {
+            min: prices[0],
+            max: prices[prices.length - 1],
+            median: prices[Math.floor(prices.length / 2)],
+            avg: prices.reduce((a, b) => a + b, 0) / prices.length,
+            ranges: {
+              budget: prices.filter(p => p <= 50).length,
+              mid: prices.filter(p => p > 50 && p <= 100).length,
+              premium: prices.filter(p => p > 100).length
+            }
+          };
+        }
+        
+        // === LEARN RELATIONSHIPS ===
+        const productUsage = {};
+        bundlesData.forEach(b => {
+          const allCodes = [b.Bundles_RGU, b.Additional_bundle_codes, b.Included_Addon]
+            .filter(Boolean)
+            .join(' ')
+            .match(/[PDAS]\d+/g) || [];
+          
+          allCodes.forEach(code => {
+            if (!productUsage[code]) productUsage[code] = 0;
+            productUsage[code]++;
+          });
+        });
+        
+        const topProducts = Object.entries(productUsage)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 20)
+          .map(([code, count]) => {
+            const product = productsData.find(p => p.Code === code);
+            return { code, count, name: product?.Name || 'Unknown', usagePercent: ((count / bundlesData.length) * 100).toFixed(1) };
+          });
+        
+        learned.relationships = {
+          topProducts,
+          totalUniqueProducts: Object.keys(productUsage).length
+        };
+        
+        // === LEARN TIERS ===
+        const tiers = {};
+        bundlesData.forEach(b => {
+          if (b.Tier) {
+            if (!tiers[b.Tier]) tiers[b.Tier] = 0;
+            tiers[b.Tier]++;
+          }
+        });
+        learned.tiers = tiers;
+        
+        // === LEARN CHANNELS ===
+        const channels = {};
+        bundlesData.forEach(b => {
+          if (b.Channel) {
+            if (!channels[b.Channel]) channels[b.Channel] = 0;
+            channels[b.Channel]++;
+          }
+        });
+        learned.channels = channels;
+        
+        // === STATISTICS ===
+        learned.statistics = {
+          totalProducts: productsData.length,
+          totalBundles: bundlesData.length,
+          bundlesWithAddons: bundlesData.filter(b => b.Included_Addon).length,
+          bundlesWithExclusions: bundlesData.filter(b => b.Excluded_Addon).length,
+          customisableBundles: bundlesData.filter(b => b.Customisable === 'TRUE' || b.Customisable === true).length,
+          streamBundles: bundlesData.filter(b => b.Is_Stream === 'TRUE' || b.Is_Stream === true).length,
+          studentBundles: bundlesData.filter(b => b.Is_Student === 'TRUE' || b.Is_Student === true).length
+        };
+        
+        return learned;
+      };
+      
+      // Build comprehensive AI context from knowledge base
+      const buildKnowledgeContext = () => {
+        const k = catalogueKnowledge;
+        let context = `\n=== CATALOGUE KNOWLEDGE BASE ===\n`;
+        
+        // Business Rules
+        context += `\n📚 BUSINESS RULES (${k.businessRules.length} rules):\n`;
+        const rulesByCategory = {};
+        k.businessRules.forEach(r => {
+          if (!rulesByCategory[r.category]) rulesByCategory[r.category] = [];
+          rulesByCategory[r.category].push(r.rule);
+        });
+        Object.entries(rulesByCategory).forEach(([cat, rules]) => {
+          context += `\n[${cat}]\n`;
+          rules.forEach(r => context += `• ${r}\n`);
+        });
+        
+        // Custom Notes
+        if (k.customNotes.length > 0) {
+          context += `\n📝 CUSTOM NOTES:\n`;
+          k.customNotes.forEach(n => context += `• ${n.note}\n`);
+        }
+        
+        // Learned Knowledge
+        const l = k.learned;
+        if (l && Object.keys(l).length > 0) {
+          context += `\n🧠 AUTO-LEARNED KNOWLEDGE:\n`;
+          
+          if (l.statistics) {
+            context += `\n[Statistics]\n`;
+            context += `• Total Products: ${l.statistics.totalProducts}\n`;
+            context += `• Total Bundles: ${l.statistics.totalBundles}\n`;
+            context += `• Bundles with Add-ons: ${l.statistics.bundlesWithAddons}\n`;
+            context += `• Customisable Bundles: ${l.statistics.customisableBundles}\n`;
+          }
+          
+          if (l.productCodePatterns) {
+            context += `\n[Product Code Patterns]\n`;
+            Object.entries(l.productCodePatterns).forEach(([prefix, data]) => {
+              if (data.count > 0) {
+                context += `• ${prefix}xxxxx = ${data.meaning} (${data.count} total). Examples: ${data.examples.slice(0, 3).join(', ')}\n`;
+              }
+            });
+          }
+          
+          if (l.networkTypes && Object.keys(l.networkTypes).length > 0) {
+            context += `\n[Network Types]\n`;
+            Object.entries(l.networkTypes).forEach(([net, data]) => {
+              context += `• ${net}: ${data.count} bundles, speeds: ${data.speeds.join(', ')} Mbps\n`;
+            });
+          }
+          
+          if (l.bundleTypes && Object.keys(l.bundleTypes).length > 0) {
+            context += `\n[Bundle Types Detected]\n`;
+            Object.entries(l.bundleTypes).forEach(([type, data]) => {
+              context += `• "${type}" bundles: ${data.count} total, avg price £${data.avgPrice.toFixed(2)}\n`;
+            });
+          }
+          
+          if (l.pricingStructure) {
+            context += `\n[Pricing Structure]\n`;
+            context += `• Price range: £${l.pricingStructure.min.toFixed(2)} - £${l.pricingStructure.max.toFixed(2)}\n`;
+            context += `• Average price: £${l.pricingStructure.avg.toFixed(2)}\n`;
+            context += `• Budget (≤£50): ${l.pricingStructure.ranges.budget} bundles\n`;
+            context += `• Mid (£50-100): ${l.pricingStructure.ranges.mid} bundles\n`;
+            context += `• Premium (>£100): ${l.pricingStructure.ranges.premium} bundles\n`;
+          }
+          
+          if (l.relationships?.topProducts) {
+            context += `\n[Most Used Products]\n`;
+            l.relationships.topProducts.slice(0, 10).forEach(p => {
+              context += `• ${p.code} "${p.name}" - used in ${p.count} bundles (${p.usagePercent}%)\n`;
+            });
+          }
+          
+          if (l.tiers && Object.keys(l.tiers).length > 0) {
+            context += `\n[Tiers]\n`;
+            Object.entries(l.tiers).forEach(([tier, count]) => {
+              context += `• ${tier}: ${count} bundles\n`;
+            });
+          }
+        }
+        
+        context += `\n=== END KNOWLEDGE BASE ===\n`;
+        return context;
+      };
+
       const getAllProductCodes = () => {
         const codes = new Set();
         products.forEach(p => codes.add(p.Code));
@@ -1750,12 +2049,30 @@ Return ONLY valid JSON:
               const cols = Object.keys(results.data[0] || {}).join(', ');
               addMessage('system', `✅ Loaded ${results.data.length} products\n📊 Columns: ${cols}\n🧠 Data analyzed and indexed`);
               if (showOnboarding) completeOnboarding();
+              
+              // Trigger learning if we have both products and bundles
+              setTimeout(() => {
+                if (bundles.length > 0) {
+                  const learned = learnFromCatalogue(results.data, bundles);
+                  setCatalogueKnowledge(prev => ({ ...prev, learned, lastAnalyzed: new Date().toISOString() }));
+                  addMessage('system', `🧠 AI Knowledge Updated! Learned ${Object.keys(learned.bundleTypes || {}).length} bundle patterns, ${learned.relationships?.topProducts?.length || 0} key products, ${Object.keys(learned.networkTypes || {}).length} network types.`);
+                }
+              }, 100);
             } else {
               setBundles(results.data);
               const cols = Object.keys(results.data[0] || {}).join(', ');
               const detectedProducts = analysis?.patterns?.products?.slice(0, 10).map(p => p.name).join(', ') || 'None detected';
               addMessage('system', `✅ Loaded ${results.data.length} bundles\n📊 Columns: ${cols}\n🔍 Products detected: ${detectedProducts}\n🧠 Data analyzed and indexed`);
               if (showOnboarding) completeOnboarding();
+              
+              // Trigger learning if we have both products and bundles
+              setTimeout(() => {
+                if (products.length > 0) {
+                  const learned = learnFromCatalogue(products, results.data);
+                  setCatalogueKnowledge(prev => ({ ...prev, learned, lastAnalyzed: new Date().toISOString() }));
+                  addMessage('system', `🧠 AI Knowledge Updated! Learned ${Object.keys(learned.bundleTypes || {}).length} bundle patterns, ${learned.relationships?.topProducts?.length || 0} key products, ${Object.keys(learned.networkTypes || {}).length} network types.`);
+                }
+              }, 100);
             }
           },
           error: (error) => addMessage('system', `❌ Error: ${error.message}`)
@@ -2008,6 +2325,7 @@ End with: **Total: ${preAnalysis.data.length} bundles found**
           
           // Build smart context from data dictionary
           const smartContext = buildSmartContext();
+          const knowledgeContext = buildKnowledgeContext();
 
           const currentDate = new Date();
           const dateStr = currentDate.toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -2024,7 +2342,9 @@ Format the results as a clean markdown table using the exact column names provid
 Keep your response concise - just the table and the total count.
 Do NOT re-analyze or question the results - they are accurate.` 
             :
-            `You are an expert data analyst. IMPORTANT: Search EVERY row carefully.
+            `You are an expert VM O2 Product Catalogue analyst. You deeply understand the products, bundles, pricing structures, and business rules.
+
+${knowledgeContext}
 
 CURRENT DATE: ${dateStr} | YEAR: ${currentDate.getFullYear()}
 
@@ -2034,12 +2354,15 @@ ${dataContext}
 
 USER QUESTION: ${userPrompt}
 
-RULES:
-1. Search EVERY row in the data - don't sample
-2. Check ALL columns for matches (case-insensitive)
-3. Format results as markdown tables with exact column names
-4. Always end with "**Total: X found**"
-5. If uncertain, say so - don't guess
+INSTRUCTIONS:
+1. Use your KNOWLEDGE BASE above to understand the data structure and business rules
+2. Search EVERY row in the data - don't sample
+3. Check ALL columns for matches (case-insensitive)
+4. When explaining products/bundles, reference the business rules you know
+5. Format results as markdown tables with exact column names
+6. Always end with "**Total: X found**" for count queries
+7. If asked about relationships or rules, use the Knowledge Base
+8. Be specific about product codes and what they mean (P=Product, D=Discount, A=Addon, S=SIM)
 
 COLUMNS: ${bundleColumns.join(' | ')}`;
 
@@ -2544,6 +2867,9 @@ COLUMNS: ${bundleColumns.join(' | ')}`;
                 <button onClick={() => setShowAddonViewer(!showAddonViewer)} className={`pill ${showAddonViewer ? 'bg-amber-600 text-white' : 'bg-white text-gray-600 border border-slate-200 hover:border-amber-300'}`}>
                   <span className="flex items-center gap-1.5"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg> 🔗 Add-on Lookup</span>
                 </button>
+                <button onClick={() => setShowKnowledgeBase(!showKnowledgeBase)} className={`pill ${showKnowledgeBase ? 'bg-cyan-600 text-white' : 'bg-white text-gray-600 border border-slate-200 hover:border-cyan-300'}`}>
+                  <span className="flex items-center gap-1.5"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg> 📚 Knowledge</span>
+                </button>
                 <button onClick={() => setShowImpactAnalysis(!showImpactAnalysis)} className={`pill ${showImpactAnalysis ? 'bg-rose-600 text-white' : 'bg-white text-gray-600 border border-slate-200 hover:border-rose-300'}`}>
                   <span className="flex items-center gap-1.5"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg> Impact</span>
                 </button>
@@ -2839,6 +3165,323 @@ COLUMNS: ${bundleColumns.join(' | ')}`;
                     })()}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Knowledge Base Panel */}
+            {showKnowledgeBase && (
+              <div className="bg-white rounded-xl shadow-lg p-6 mb-6 border-2 border-cyan-200">
+                <div className="flex justify-between items-center mb-4">
+                  <div>
+                    <h2 className="text-xl font-bold text-cyan-800">📚 AI Knowledge Base</h2>
+                    <p className="text-sm text-gray-600">What the AI knows about your catalogue - add rules to make it smarter</p>
+                  </div>
+                  <button onClick={() => setShowKnowledgeBase(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+                </div>
+                
+                <div className="grid md:grid-cols-2 gap-6">
+                  {/* Left Column - Business Rules */}
+                  <div className="space-y-4">
+                    <div className="bg-cyan-50 rounded-lg p-4 border border-cyan-200">
+                      <h3 className="font-semibold text-cyan-800 mb-3">📋 Business Rules ({catalogueKnowledge.businessRules.length})</h3>
+                      <p className="text-xs text-gray-600 mb-3">These rules help the AI understand your catalogue structure</p>
+                      
+                      <div className="max-h-64 overflow-y-auto space-y-2">
+                        {Object.entries(
+                          catalogueKnowledge.businessRules.reduce((acc, rule) => {
+                            if (!acc[rule.category]) acc[rule.category] = [];
+                            acc[rule.category].push(rule);
+                            return acc;
+                          }, {})
+                        ).map(([category, rules]) => (
+                          <div key={category} className="mb-3">
+                            <h4 className="text-xs font-bold text-cyan-700 uppercase mb-1">{category}</h4>
+                            {rules.map(rule => (
+                              <div key={rule.id} className="flex items-start gap-2 text-sm p-2 bg-white rounded border border-cyan-100 mb-1">
+                                <span className="text-cyan-500">•</span>
+                                <span className="flex-1 text-gray-700">{rule.rule}</span>
+                                <button 
+                                  onClick={() => setCatalogueKnowledge(prev => ({
+                                    ...prev,
+                                    businessRules: prev.businessRules.filter(r => r.id !== rule.id)
+                                  }))}
+                                  className="text-red-400 hover:text-red-600 text-xs"
+                                >✕</button>
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                      
+                      {/* Add New Rule */}
+                      <div className="mt-4 pt-4 border-t border-cyan-200">
+                        <h4 className="text-sm font-semibold text-cyan-800 mb-2">➕ Add New Rule</h4>
+                        <div className="flex gap-2">
+                          <select id="newRuleCategory" className="px-2 py-1 border border-cyan-300 rounded text-sm">
+                            <option value="Products">Products</option>
+                            <option value="Bundles">Bundles</option>
+                            <option value="Pricing">Pricing</option>
+                            <option value="Network">Network</option>
+                            <option value="TV">TV</option>
+                            <option value="Bundle Types">Bundle Types</option>
+                            <option value="Business">Business</option>
+                            <option value="Other">Other</option>
+                          </select>
+                          <input 
+                            id="newRuleText"
+                            type="text" 
+                            placeholder="Enter a business rule..."
+                            className="flex-1 px-2 py-1 border border-cyan-300 rounded text-sm"
+                          />
+                          <button 
+                            onClick={() => {
+                              const category = document.getElementById('newRuleCategory').value;
+                              const rule = document.getElementById('newRuleText').value;
+                              if (rule.trim()) {
+                                setCatalogueKnowledge(prev => ({
+                                  ...prev,
+                                  businessRules: [...prev.businessRules, { 
+                                    id: Date.now(), 
+                                    category, 
+                                    rule: rule.trim() 
+                                  }]
+                                }));
+                                document.getElementById('newRuleText').value = '';
+                              }
+                            }}
+                            className="px-3 py-1 bg-cyan-600 text-white rounded text-sm hover:bg-cyan-700"
+                          >Add</button>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Custom Notes */}
+                    <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
+                      <h3 className="font-semibold text-yellow-800 mb-3">📝 Custom Notes ({catalogueKnowledge.customNotes.length})</h3>
+                      <p className="text-xs text-gray-600 mb-3">Add specific notes about your catalogue that the AI should know</p>
+                      
+                      <div className="max-h-32 overflow-y-auto space-y-1 mb-3">
+                        {catalogueKnowledge.customNotes.map((note, idx) => (
+                          <div key={idx} className="flex items-start gap-2 text-sm p-2 bg-white rounded border border-yellow-100">
+                            <span className="text-yellow-500">📌</span>
+                            <span className="flex-1 text-gray-700">{note.note}</span>
+                            <button 
+                              onClick={() => setCatalogueKnowledge(prev => ({
+                                ...prev,
+                                customNotes: prev.customNotes.filter((_, i) => i !== idx)
+                              }))}
+                              className="text-red-400 hover:text-red-600 text-xs"
+                            >✕</button>
+                          </div>
+                        ))}
+                        {catalogueKnowledge.customNotes.length === 0 && (
+                          <p className="text-sm text-gray-400 italic">No custom notes yet</p>
+                        )}
+                      </div>
+                      
+                      <div className="flex gap-2">
+                        <input 
+                          id="newNoteText"
+                          type="text" 
+                          placeholder="e.g., 'Netflix SWA means Netflix is included free'"
+                          className="flex-1 px-2 py-1 border border-yellow-300 rounded text-sm"
+                        />
+                        <button 
+                          onClick={() => {
+                            const note = document.getElementById('newNoteText').value;
+                            if (note.trim()) {
+                              setCatalogueKnowledge(prev => ({
+                                ...prev,
+                                customNotes: [...prev.customNotes, { note: note.trim(), addedAt: new Date().toISOString() }]
+                              }));
+                              document.getElementById('newNoteText').value = '';
+                            }
+                          }}
+                          className="px-3 py-1 bg-yellow-600 text-white rounded text-sm hover:bg-yellow-700"
+                        >Add</button>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Right Column - Auto-Learned Knowledge */}
+                  <div className="space-y-4">
+                    <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                      <h3 className="font-semibold text-green-800 mb-3">🧠 Auto-Learned Knowledge</h3>
+                      {catalogueKnowledge.lastAnalyzed ? (
+                        <p className="text-xs text-gray-600 mb-3">Last analyzed: {new Date(catalogueKnowledge.lastAnalyzed).toLocaleString()}</p>
+                      ) : (
+                        <p className="text-xs text-gray-600 mb-3">Upload products + bundles to auto-learn</p>
+                      )}
+                      
+                      {catalogueKnowledge.learned && Object.keys(catalogueKnowledge.learned).length > 0 ? (
+                        <div className="space-y-3 max-h-96 overflow-y-auto">
+                          {/* Statistics */}
+                          {catalogueKnowledge.learned.statistics && (
+                            <div className="bg-white rounded p-3 border border-green-100">
+                              <h4 className="text-xs font-bold text-green-700 uppercase mb-2">📊 Statistics</h4>
+                              <div className="grid grid-cols-2 gap-2 text-sm">
+                                <div>Products: <span className="font-bold">{catalogueKnowledge.learned.statistics.totalProducts}</span></div>
+                                <div>Bundles: <span className="font-bold">{catalogueKnowledge.learned.statistics.totalBundles}</span></div>
+                                <div>With Add-ons: <span className="font-bold">{catalogueKnowledge.learned.statistics.bundlesWithAddons}</span></div>
+                                <div>Customisable: <span className="font-bold">{catalogueKnowledge.learned.statistics.customisableBundles}</span></div>
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Product Code Patterns */}
+                          {catalogueKnowledge.learned.productCodePatterns && (
+                            <div className="bg-white rounded p-3 border border-green-100">
+                              <h4 className="text-xs font-bold text-green-700 uppercase mb-2">🏷️ Product Code Patterns</h4>
+                              <div className="space-y-1 text-sm">
+                                {Object.entries(catalogueKnowledge.learned.productCodePatterns).map(([prefix, data]) => (
+                                  data.count > 0 && (
+                                    <div key={prefix} className="flex justify-between">
+                                      <span className="font-mono text-green-600">{prefix}xxxxx</span>
+                                      <span className="text-gray-600">{data.meaning} ({data.count})</span>
+                                    </div>
+                                  )
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Network Types */}
+                          {catalogueKnowledge.learned.networkTypes && Object.keys(catalogueKnowledge.learned.networkTypes).length > 0 && (
+                            <div className="bg-white rounded p-3 border border-green-100">
+                              <h4 className="text-xs font-bold text-green-700 uppercase mb-2">🌐 Network Types</h4>
+                              <div className="space-y-1 text-sm">
+                                {Object.entries(catalogueKnowledge.learned.networkTypes).map(([net, data]) => (
+                                  <div key={net} className="flex justify-between">
+                                    <span className="font-bold text-blue-600">{net}</span>
+                                    <span className="text-gray-600">{data.count} bundles</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Bundle Types */}
+                          {catalogueKnowledge.learned.bundleTypes && Object.keys(catalogueKnowledge.learned.bundleTypes).length > 0 && (
+                            <div className="bg-white rounded p-3 border border-green-100">
+                              <h4 className="text-xs font-bold text-green-700 uppercase mb-2">📦 Bundle Types Detected</h4>
+                              <div className="flex flex-wrap gap-2">
+                                {Object.entries(catalogueKnowledge.learned.bundleTypes).map(([type, data]) => (
+                                  <span key={type} className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">
+                                    {type}: {data.count}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Pricing Structure */}
+                          {catalogueKnowledge.learned.pricingStructure && (
+                            <div className="bg-white rounded p-3 border border-green-100">
+                              <h4 className="text-xs font-bold text-green-700 uppercase mb-2">💰 Pricing Learned</h4>
+                              <div className="text-sm space-y-1">
+                                <div className="flex justify-between">
+                                  <span>Range:</span>
+                                  <span className="font-bold">£{catalogueKnowledge.learned.pricingStructure.min?.toFixed(2)} - £{catalogueKnowledge.learned.pricingStructure.max?.toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span>Average:</span>
+                                  <span className="font-bold">£{catalogueKnowledge.learned.pricingStructure.avg?.toFixed(2)}</span>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Top Products */}
+                          {catalogueKnowledge.learned.relationships?.topProducts && (
+                            <div className="bg-white rounded p-3 border border-green-100">
+                              <h4 className="text-xs font-bold text-green-700 uppercase mb-2">⭐ Most Used Products</h4>
+                              <div className="space-y-1 text-xs">
+                                {catalogueKnowledge.learned.relationships.topProducts.slice(0, 5).map((p, i) => (
+                                  <div key={i} className="flex justify-between">
+                                    <span className="font-mono text-green-600">{p.code}</span>
+                                    <span className="text-gray-600 truncate max-w-32">{p.name}</span>
+                                    <span className="text-gray-500">{p.usagePercent}%</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-gray-400">
+                          <p className="text-4xl mb-2">🧠</p>
+                          <p>No data learned yet</p>
+                          <p className="text-sm">Upload products and bundles files</p>
+                        </div>
+                      )}
+                      
+                      {/* Re-learn Button */}
+                      {products.length > 0 && bundles.length > 0 && (
+                        <button 
+                          onClick={() => {
+                            const learned = learnFromCatalogue(products, bundles);
+                            setCatalogueKnowledge(prev => ({ ...prev, learned, lastAnalyzed: new Date().toISOString() }));
+                            addMessage('system', '🧠 Knowledge base refreshed!');
+                          }}
+                          className="mt-3 w-full px-3 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700"
+                        >
+                          🔄 Re-analyze Catalogue
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Export/Import Knowledge */}
+                <div className="mt-4 pt-4 border-t border-gray-200 flex gap-2">
+                  <button 
+                    onClick={() => {
+                      const data = JSON.stringify(catalogueKnowledge, null, 2);
+                      const blob = new Blob([data], { type: 'application/json' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = 'catalogue_knowledge.json';
+                      a.click();
+                    }}
+                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 text-sm"
+                  >
+                    📥 Export Knowledge
+                  </button>
+                  <label className="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 text-sm cursor-pointer">
+                    📤 Import Knowledge
+                    <input 
+                      type="file" 
+                      accept=".json"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            try {
+                              const imported = JSON.parse(event.target.result);
+                              setCatalogueKnowledge(imported);
+                              addMessage('system', '✅ Knowledge base imported successfully!');
+                            } catch (err) {
+                              addMessage('system', '❌ Failed to import knowledge base');
+                            }
+                          };
+                          reader.readAsText(file);
+                        }
+                      }}
+                    />
+                  </label>
+                  <button 
+                    onClick={() => {
+                      setInput('What do you know about my catalogue? Summarize the business rules and patterns you understand.');
+                      setActiveTab('chat');
+                    }}
+                    className="px-4 py-2 bg-cyan-600 text-white rounded hover:bg-cyan-700 text-sm ml-auto"
+                  >
+                    🤖 Test AI Knowledge
+                  </button>
+                </div>
               </div>
             )}
 
