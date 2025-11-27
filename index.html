@@ -648,6 +648,15 @@
       const [onboardingStep, setOnboardingStep] = useState(1);
       const [showPromptLibrary, setShowPromptLibrary] = useState(false);
       const [showImpactAnalysis, setShowImpactAnalysis] = useState(false);
+      
+      // Bundle Price Calculator state
+      const [showPriceCalculator, setShowPriceCalculator] = useState(false);
+      const [selectedBundle, setSelectedBundle] = useState(null);
+      const [calculatorAddons, setCalculatorAddons] = useState([]);
+      
+      // Add-on Impact Viewer state
+      const [showAddonViewer, setShowAddonViewer] = useState(false);
+      const [selectedProductCode, setSelectedProductCode] = useState('');
       const [impactSearchTerm, setImpactSearchTerm] = useState('');
       const [impactResults, setImpactResults] = useState(null);
       const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -976,6 +985,212 @@
       };
 
       // Quick impact suggestions based on data
+      // ========== BUNDLE PRICE CALCULATOR ==========
+      const getBundlePriceBreakdown = (bundle) => {
+        if (!bundle) return null;
+        
+        const parsePrice = (val) => {
+          if (!val && val !== 0) return null;
+          const num = parseFloat(String(val).replace(/[^0-9.-]/g, ''));
+          return isNaN(num) ? null : num;
+        };
+        
+        const breakdown = {
+          bundleId: bundle.ID,
+          bundleName: bundle.Name,
+          description: bundle.Description,
+          contractMonths: bundle.Contract_months || 24,
+          
+          // Pricing tiers
+          discountedPrice1: parsePrice(bundle.Discounted_Monthly_Price_1),
+          discountedLength1: parsePrice(bundle.Discounted_Length_1),
+          discountedPrice2: parsePrice(bundle.Discounted_Monthly_Price_2),
+          discountedLength2: parsePrice(bundle.Discounted_Length_2),
+          ongoingPrice: parsePrice(bundle.On_going_Monthly_Price),
+          setupCost: parsePrice(bundle.Setup_Cost),
+          setupCostNow: parsePrice(bundle.Setup_Cost_Now),
+          
+          // Network & speed
+          networkType: bundle.BB_Network_Type,
+          speed: bundle.BB_Speed_Mbs,
+          
+          // Included products
+          includedProducts: [],
+          includedAddons: [],
+          additionalCodes: [],
+          excludedAddons: [],
+          
+          // Tier info
+          tier: bundle.Tier,
+          isStream: bundle.Is_Stream === 'TRUE' || bundle.Is_Stream === true,
+          isStudent: bundle.Is_Student === 'TRUE' || bundle.Is_Student === true,
+        };
+        
+        // Parse product codes
+        const extractCodes = (str) => {
+          if (!str) return [];
+          return String(str).match(/[PDA]\d+/g) || [];
+        };
+        
+        breakdown.includedProducts = extractCodes(bundle.Bundles_RGU);
+        breakdown.includedAddons = extractCodes(bundle.Included_Addon);
+        breakdown.additionalCodes = extractCodes(bundle.Additional_bundle_codes);
+        breakdown.excludedAddons = extractCodes(bundle.Excluded_Addon);
+        
+        // Calculate 24-month total cost
+        let total24Month = 0;
+        if (breakdown.discountedPrice1 !== null && breakdown.discountedLength1) {
+          total24Month += breakdown.discountedPrice1 * breakdown.discountedLength1;
+        }
+        if (breakdown.discountedPrice2 !== null && breakdown.discountedLength2) {
+          total24Month += breakdown.discountedPrice2 * breakdown.discountedLength2;
+        }
+        const remainingMonths = 24 - (breakdown.discountedLength1 || 0) - (breakdown.discountedLength2 || 0);
+        if (remainingMonths > 0 && breakdown.ongoingPrice !== null) {
+          total24Month += breakdown.ongoingPrice * remainingMonths;
+        }
+        if (breakdown.setupCostNow) {
+          total24Month += breakdown.setupCostNow;
+        }
+        breakdown.total24Month = total24Month;
+        breakdown.avgMonthly24 = total24Month / 24;
+        
+        // Lookup product details
+        breakdown.productDetails = breakdown.includedProducts.map(code => {
+          const product = products.find(p => p.Code === code);
+          return product ? { code, name: product.Name, type: product.Type, category: product.Category } : { code, name: 'Unknown', type: '-', category: '-' };
+        });
+        
+        breakdown.addonDetails = breakdown.includedAddons.map(code => {
+          const product = products.find(p => p.Code === code);
+          return product ? { code, name: product.Name, type: product.Type, category: product.Category } : { code, name: 'Unknown', type: '-', category: '-' };
+        });
+        
+        return breakdown;
+      };
+      
+      // Get available add-ons that can be added to a bundle
+      const getAvailableAddons = () => {
+        return products.filter(p => p.Type === 'AddOn').map(p => ({
+          code: p.Code,
+          name: p.Name,
+          category: p.Category,
+          price: parseFloat(String(p.Discounted_Monthly_Price || 0).replace(/[^0-9.-]/g, '')) || 0
+        }));
+      };
+      
+      // Calculate price delta when adding/removing an addon
+      const calculateAddonDelta = (addonCode, isAdding) => {
+        const addon = products.find(p => p.Code === addonCode);
+        if (!addon) return 0;
+        const price = parseFloat(String(addon.Discounted_Monthly_Price || 0).replace(/[^0-9.-]/g, '')) || 0;
+        return isAdding ? price : -price;
+      };
+      
+      // ========== ADD-ON IMPACT VIEWER ==========
+      const getProductImpact = (productCode) => {
+        if (!productCode || bundles.length === 0) return null;
+        
+        const code = productCode.toUpperCase().trim();
+        
+        // Find the product
+        const product = products.find(p => p.Code === code);
+        
+        // Find all bundles that reference this product
+        const affectedBundles = bundles.filter(bundle => {
+          const allCodes = [
+            bundle.Bundles_RGU,
+            bundle.Additional_bundle_codes,
+            bundle.Included_Addon,
+            bundle.Excluded_Addon
+          ].filter(Boolean).join(' ');
+          return allCodes.includes(code);
+        });
+        
+        // Categorize how it's used in each bundle
+        const usage = {
+          asCore: [],      // In Bundles_RGU
+          asAddon: [],     // In Included_Addon
+          asAdditional: [], // In Additional_bundle_codes
+          asExcluded: []   // In Excluded_Addon
+        };
+        
+        affectedBundles.forEach(bundle => {
+          if (String(bundle.Bundles_RGU || '').includes(code)) {
+            usage.asCore.push(bundle);
+          }
+          if (String(bundle.Included_Addon || '').includes(code)) {
+            usage.asAddon.push(bundle);
+          }
+          if (String(bundle.Additional_bundle_codes || '').includes(code)) {
+            usage.asAdditional.push(bundle);
+          }
+          if (String(bundle.Excluded_Addon || '').includes(code)) {
+            usage.asExcluded.push(bundle);
+          }
+        });
+        
+        // Find related products (products often bundled with this one)
+        const relatedProducts = {};
+        affectedBundles.forEach(bundle => {
+          const allCodes = String(bundle.Bundles_RGU || '').match(/[PDA]\d+/g) || [];
+          allCodes.forEach(c => {
+            if (c !== code) {
+              relatedProducts[c] = (relatedProducts[c] || 0) + 1;
+            }
+          });
+        });
+        
+        // Get required products for this product
+        const requiredProducts = product?.Required_Product ? 
+          String(product.Required_Product).match(/[PDA]\d+/g) || [] : [];
+        
+        // Calculate revenue impact
+        let totalRevenue = 0;
+        affectedBundles.forEach(bundle => {
+          const price = parseFloat(String(bundle.On_going_Monthly_Price || 0).replace(/[^0-9.-]/g, '')) || 0;
+          totalRevenue += price;
+        });
+        
+        return {
+          productCode: code,
+          productName: product?.Name || 'Unknown Product',
+          productType: product?.Type || 'Unknown',
+          productCategory: product?.Category || 'Unknown',
+          totalBundlesAffected: affectedBundles.length,
+          percentOfCatalog: ((affectedBundles.length / bundles.length) * 100).toFixed(1),
+          usage,
+          relatedProducts: Object.entries(relatedProducts)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 10)
+            .map(([c, count]) => {
+              const p = products.find(pr => pr.Code === c);
+              return { code: c, name: p?.Name || 'Unknown', count };
+            }),
+          requiredProducts: requiredProducts.map(c => {
+            const p = products.find(pr => pr.Code === c);
+            return { code: c, name: p?.Name || 'Unknown' };
+          }),
+          totalMonthlyRevenue: totalRevenue,
+          affectedBundles
+        };
+      };
+      
+      // Get all unique product codes for autocomplete
+      const getAllProductCodes = () => {
+        const codes = new Set();
+        products.forEach(p => codes.add(p.Code));
+        bundles.forEach(b => {
+          [b.Bundles_RGU, b.Additional_bundle_codes, b.Included_Addon, b.Excluded_Addon]
+            .filter(Boolean)
+            .forEach(str => {
+              const matches = String(str).match(/[PDA]\d+/g) || [];
+              matches.forEach(c => codes.add(c));
+            });
+        });
+        return Array.from(codes).sort();
+      };
+
       const getImpactSuggestions = () => {
         if (bundles.length === 0) return [];
         
@@ -2323,6 +2538,12 @@ COLUMNS: ${bundleColumns.join(' | ')}`;
                 <button onClick={() => setShowCompare(!showCompare)} className={`pill ${showCompare ? 'bg-purple-600 text-white' : 'bg-white text-gray-600 border border-slate-200 hover:border-purple-300'}`}>
                   <span className="flex items-center gap-1.5"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg> Compare {compareItems.length > 0 && `(${compareItems.length})`}</span>
                 </button>
+                <button onClick={() => setShowPriceCalculator(!showPriceCalculator)} className={`pill ${showPriceCalculator ? 'bg-emerald-600 text-white' : 'bg-white text-gray-600 border border-slate-200 hover:border-emerald-300'}`}>
+                  <span className="flex items-center gap-1.5"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg> 🧮 Price Calc</span>
+                </button>
+                <button onClick={() => setShowAddonViewer(!showAddonViewer)} className={`pill ${showAddonViewer ? 'bg-amber-600 text-white' : 'bg-white text-gray-600 border border-slate-200 hover:border-amber-300'}`}>
+                  <span className="flex items-center gap-1.5"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg> 🔗 Add-on Lookup</span>
+                </button>
                 <button onClick={() => setShowImpactAnalysis(!showImpactAnalysis)} className={`pill ${showImpactAnalysis ? 'bg-rose-600 text-white' : 'bg-white text-gray-600 border border-slate-200 hover:border-rose-300'}`}>
                   <span className="flex items-center gap-1.5"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg> Impact</span>
                 </button>
@@ -2430,6 +2651,401 @@ COLUMNS: ${bundleColumns.join(' | ')}`;
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Bundle Price Calculator Panel */}
+            {showPriceCalculator && (
+              <div className="bg-white rounded-xl shadow-lg p-6 mb-6 border-2 border-emerald-200">
+                <div className="flex justify-between items-center mb-4">
+                  <div>
+                    <h2 className="text-xl font-bold text-emerald-800">🧮 Bundle Price Calculator</h2>
+                    <p className="text-sm text-gray-600">See full price breakdown and simulate add-on changes</p>
+                  </div>
+                  <button onClick={() => setShowPriceCalculator(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+                </div>
+                
+                {bundles.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <p className="text-lg mb-2">📁 No bundles loaded</p>
+                    <p className="text-sm">Upload your bundles data to use the Price Calculator</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Bundle Selector */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Select a Bundle</label>
+                      <select 
+                        onChange={(e) => {
+                          const bundle = bundles.find(b => String(b.ID) === e.target.value);
+                          setSelectedBundle(bundle);
+                          setCalculatorAddons([]);
+                        }}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                      >
+                        <option value="">-- Choose a bundle --</option>
+                        {bundles.slice(0, 200).map((b, idx) => (
+                          <option key={idx} value={b.ID}>{b.ID} - {b.Name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    
+                    {/* Price Breakdown */}
+                    {selectedBundle && (() => {
+                      const breakdown = getBundlePriceBreakdown(selectedBundle);
+                      if (!breakdown) return null;
+                      
+                      return (
+                        <div className="space-y-4">
+                          {/* Bundle Header */}
+                          <div className="bg-emerald-50 rounded-lg p-4 border border-emerald-200">
+                            <h3 className="font-bold text-lg text-emerald-900">{breakdown.bundleName}</h3>
+                            <p className="text-sm text-gray-600">{breakdown.description}</p>
+                            <div className="flex gap-4 mt-2 text-sm">
+                              <span className="px-2 py-1 bg-emerald-100 rounded">{breakdown.networkType}</span>
+                              {breakdown.speed && <span className="px-2 py-1 bg-blue-100 rounded">{breakdown.speed} Mbps</span>}
+                              <span className="px-2 py-1 bg-purple-100 rounded">{breakdown.contractMonths} months</span>
+                              {breakdown.tier && <span className="px-2 py-1 bg-amber-100 rounded">Tier: {breakdown.tier}</span>}
+                            </div>
+                          </div>
+                          
+                          {/* Price Breakdown Grid */}
+                          <div className="grid md:grid-cols-2 gap-4">
+                            {/* Monthly Pricing */}
+                            <div className="bg-white border border-gray-200 rounded-lg p-4">
+                              <h4 className="font-semibold text-gray-800 mb-3">💰 Monthly Pricing</h4>
+                              <div className="space-y-2 text-sm">
+                                {breakdown.discountedPrice1 !== null && (
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-600">Months 1-{breakdown.discountedLength1}:</span>
+                                    <span className="font-bold text-emerald-600">£{breakdown.discountedPrice1?.toFixed(2)}/mo</span>
+                                  </div>
+                                )}
+                                {breakdown.discountedPrice2 !== null && (
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-600">Months {(breakdown.discountedLength1 || 0) + 1}-{(breakdown.discountedLength1 || 0) + (breakdown.discountedLength2 || 0)}:</span>
+                                    <span className="font-bold text-amber-600">£{breakdown.discountedPrice2?.toFixed(2)}/mo</span>
+                                  </div>
+                                )}
+                                {breakdown.ongoingPrice !== null && (
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-600">Ongoing price:</span>
+                                    <span className="font-bold text-gray-800">£{breakdown.ongoingPrice?.toFixed(2)}/mo</span>
+                                  </div>
+                                )}
+                                <hr className="my-2" />
+                                {breakdown.setupCostNow !== null && breakdown.setupCostNow > 0 && (
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-600">Setup cost:</span>
+                                    <span className="font-bold text-red-600">£{breakdown.setupCostNow?.toFixed(2)}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            
+                            {/* 24-Month Summary */}
+                            <div className="bg-gradient-to-br from-emerald-500 to-teal-600 text-white rounded-lg p-4">
+                              <h4 className="font-semibold mb-3">📊 24-Month Total</h4>
+                              <div className="text-3xl font-bold mb-2">£{breakdown.total24Month?.toFixed(2)}</div>
+                              <div className="text-sm opacity-90">Average: £{breakdown.avgMonthly24?.toFixed(2)}/month</div>
+                            </div>
+                          </div>
+                          
+                          {/* Included Products */}
+                          <div className="bg-white border border-gray-200 rounded-lg p-4">
+                            <h4 className="font-semibold text-gray-800 mb-3">📦 Included Products (Bundles_RGU)</h4>
+                            <div className="flex flex-wrap gap-2">
+                              {breakdown.productDetails.map((p, i) => (
+                                <span key={i} className="px-3 py-1 bg-blue-50 text-blue-800 rounded-full text-sm border border-blue-200">
+                                  <span className="font-mono text-xs">{p.code}</span> - {p.name}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                          
+                          {/* Included Add-ons */}
+                          {breakdown.addonDetails.length > 0 && (
+                            <div className="bg-white border border-gray-200 rounded-lg p-4">
+                              <h4 className="font-semibold text-gray-800 mb-3">🎁 Included Add-ons</h4>
+                              <div className="flex flex-wrap gap-2">
+                                {breakdown.addonDetails.map((p, i) => (
+                                  <span key={i} className="px-3 py-1 bg-purple-50 text-purple-800 rounded-full text-sm border border-purple-200">
+                                    <span className="font-mono text-xs">{p.code}</span> - {p.name}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Additional Codes */}
+                          {breakdown.additionalCodes.length > 0 && (
+                            <div className="bg-white border border-gray-200 rounded-lg p-4">
+                              <h4 className="font-semibold text-gray-800 mb-3">➕ Additional Bundle Codes</h4>
+                              <div className="flex flex-wrap gap-2">
+                                {breakdown.additionalCodes.map((code, i) => {
+                                  const p = products.find(pr => pr.Code === code);
+                                  return (
+                                    <span key={i} className="px-3 py-1 bg-gray-50 text-gray-800 rounded-full text-sm border border-gray-200">
+                                      <span className="font-mono text-xs">{code}</span> {p ? `- ${p.Name}` : ''}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Excluded Add-ons */}
+                          {breakdown.excludedAddons.length > 0 && (
+                            <div className="bg-white border border-red-200 rounded-lg p-4">
+                              <h4 className="font-semibold text-red-800 mb-3">🚫 Excluded Add-ons</h4>
+                              <div className="flex flex-wrap gap-2">
+                                {breakdown.excludedAddons.map((code, i) => {
+                                  const p = products.find(pr => pr.Code === code);
+                                  return (
+                                    <span key={i} className="px-3 py-1 bg-red-50 text-red-800 rounded-full text-sm border border-red-200">
+                                      <span className="font-mono text-xs">{code}</span> {p ? `- ${p.Name}` : ''}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Quick Actions */}
+                          <div className="flex gap-2 mt-4">
+                            <button 
+                              onClick={() => {
+                                setInput(`Tell me everything about bundle ${breakdown.bundleId} "${breakdown.bundleName}"`);
+                                setActiveTab('chat');
+                              }}
+                              className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm"
+                            >
+                              🤖 Ask AI About This Bundle
+                            </button>
+                            <button 
+                              onClick={() => {
+                                setSelectedProductCode(breakdown.includedProducts[0] || '');
+                                setShowAddonViewer(true);
+                              }}
+                              className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 text-sm"
+                            >
+                              🔗 View Product Dependencies
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Add-on Impact Viewer Panel */}
+            {showAddonViewer && (
+              <div className="bg-white rounded-xl shadow-lg p-6 mb-6 border-2 border-amber-200">
+                <div className="flex justify-between items-center mb-4">
+                  <div>
+                    <h2 className="text-xl font-bold text-amber-800">🔗 Add-on / Product Impact Viewer</h2>
+                    <p className="text-sm text-gray-600">See where any product code is used across the catalogue</p>
+                  </div>
+                  <button onClick={() => setShowAddonViewer(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+                </div>
+                
+                {bundles.length === 0 || products.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <p className="text-lg mb-2">📁 No data loaded</p>
+                    <p className="text-sm">Upload products and bundles to use the Impact Viewer</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Product Code Search */}
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={selectedProductCode}
+                        onChange={(e) => setSelectedProductCode(e.target.value.toUpperCase())}
+                        placeholder="Enter product code (e.g., P106879, A135733)"
+                        className="flex-1 px-4 py-2 border border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 font-mono"
+                      />
+                      <button 
+                        onClick={() => setSelectedProductCode(selectedProductCode)}
+                        className="px-6 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700"
+                      >
+                        🔍 Search
+                      </button>
+                    </div>
+                    
+                    {/* Quick Suggestions */}
+                    <div className="flex flex-wrap gap-2">
+                      <span className="text-sm text-gray-500">Quick lookup:</span>
+                      {products.slice(0, 12).map((p, i) => (
+                        <button
+                          key={i}
+                          onClick={() => setSelectedProductCode(p.Code)}
+                          className="px-2 py-1 bg-amber-50 text-amber-700 rounded text-xs hover:bg-amber-100 border border-amber-200"
+                        >
+                          {p.Code}
+                        </button>
+                      ))}
+                    </div>
+                    
+                    {/* Impact Results */}
+                    {selectedProductCode && (() => {
+                      const impact = getProductImpact(selectedProductCode);
+                      if (!impact) return <p className="text-gray-500">Product not found</p>;
+                      
+                      return (
+                        <div className="space-y-4 mt-4">
+                          {/* Product Header */}
+                          <div className="bg-amber-50 rounded-lg p-4 border border-amber-200">
+                            <div className="flex items-center gap-3">
+                              <span className="text-2xl font-mono font-bold text-amber-800">{impact.productCode}</span>
+                              <span className="text-lg text-gray-700">{impact.productName}</span>
+                            </div>
+                            <div className="flex gap-2 mt-2">
+                              <span className="px-2 py-1 bg-amber-100 rounded text-sm">{impact.productType}</span>
+                              <span className="px-2 py-1 bg-blue-100 rounded text-sm">{impact.productCategory}</span>
+                            </div>
+                          </div>
+                          
+                          {/* Impact Summary Cards */}
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div className="bg-red-50 rounded-lg p-4 text-center border border-red-200">
+                              <div className="text-3xl font-bold text-red-600">{impact.totalBundlesAffected}</div>
+                              <div className="text-sm text-gray-600">Bundles Use This</div>
+                            </div>
+                            <div className="bg-orange-50 rounded-lg p-4 text-center border border-orange-200">
+                              <div className="text-3xl font-bold text-orange-600">{impact.percentOfCatalog}%</div>
+                              <div className="text-sm text-gray-600">Of Catalogue</div>
+                            </div>
+                            <div className="bg-blue-50 rounded-lg p-4 text-center border border-blue-200">
+                              <div className="text-3xl font-bold text-blue-600">{impact.usage.asCore.length}</div>
+                              <div className="text-sm text-gray-600">As Core Product</div>
+                            </div>
+                            <div className="bg-purple-50 rounded-lg p-4 text-center border border-purple-200">
+                              <div className="text-3xl font-bold text-purple-600">{impact.usage.asAddon.length}</div>
+                              <div className="text-sm text-gray-600">As Add-on</div>
+                            </div>
+                          </div>
+                          
+                          {/* Usage Breakdown */}
+                          <div className="grid md:grid-cols-2 gap-4">
+                            {/* As Core */}
+                            {impact.usage.asCore.length > 0 && (
+                              <div className="bg-white border border-gray-200 rounded-lg p-4">
+                                <h4 className="font-semibold text-blue-800 mb-2">📦 In Bundles_RGU ({impact.usage.asCore.length})</h4>
+                                <div className="max-h-40 overflow-y-auto space-y-1">
+                                  {impact.usage.asCore.slice(0, 20).map((b, i) => (
+                                    <div key={i} className="text-sm p-2 bg-blue-50 rounded">
+                                      <span className="font-mono text-blue-600">{b.ID}</span> - {b.Name}
+                                    </div>
+                                  ))}
+                                  {impact.usage.asCore.length > 20 && (
+                                    <p className="text-sm text-gray-500">...and {impact.usage.asCore.length - 20} more</p>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* As Add-on */}
+                            {impact.usage.asAddon.length > 0 && (
+                              <div className="bg-white border border-gray-200 rounded-lg p-4">
+                                <h4 className="font-semibold text-purple-800 mb-2">🎁 In Included_Addon ({impact.usage.asAddon.length})</h4>
+                                <div className="max-h-40 overflow-y-auto space-y-1">
+                                  {impact.usage.asAddon.slice(0, 20).map((b, i) => (
+                                    <div key={i} className="text-sm p-2 bg-purple-50 rounded">
+                                      <span className="font-mono text-purple-600">{b.ID}</span> - {b.Name}
+                                    </div>
+                                  ))}
+                                  {impact.usage.asAddon.length > 20 && (
+                                    <p className="text-sm text-gray-500">...and {impact.usage.asAddon.length - 20} more</p>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* As Excluded */}
+                            {impact.usage.asExcluded.length > 0 && (
+                              <div className="bg-white border border-red-200 rounded-lg p-4">
+                                <h4 className="font-semibold text-red-800 mb-2">🚫 In Excluded_Addon ({impact.usage.asExcluded.length})</h4>
+                                <div className="max-h-40 overflow-y-auto space-y-1">
+                                  {impact.usage.asExcluded.slice(0, 20).map((b, i) => (
+                                    <div key={i} className="text-sm p-2 bg-red-50 rounded">
+                                      <span className="font-mono text-red-600">{b.ID}</span> - {b.Name}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          
+                          {/* Related Products */}
+                          {impact.relatedProducts.length > 0 && (
+                            <div className="bg-white border border-gray-200 rounded-lg p-4">
+                              <h4 className="font-semibold text-gray-800 mb-3">🔗 Often Bundled With</h4>
+                              <div className="flex flex-wrap gap-2">
+                                {impact.relatedProducts.map((p, i) => (
+                                  <button
+                                    key={i}
+                                    onClick={() => setSelectedProductCode(p.code)}
+                                    className="px-3 py-1 bg-gray-50 hover:bg-gray-100 text-gray-800 rounded-full text-sm border border-gray-200"
+                                  >
+                                    <span className="font-mono text-xs">{p.code}</span> - {p.name} ({p.count}x)
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Required Products */}
+                          {impact.requiredProducts.length > 0 && (
+                            <div className="bg-white border border-amber-200 rounded-lg p-4">
+                              <h4 className="font-semibold text-amber-800 mb-3">⚠️ Required Products</h4>
+                              <div className="flex flex-wrap gap-2">
+                                {impact.requiredProducts.map((p, i) => (
+                                  <button
+                                    key={i}
+                                    onClick={() => setSelectedProductCode(p.code)}
+                                    className="px-3 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-full text-sm border border-amber-200"
+                                  >
+                                    <span className="font-mono text-xs">{p.code}</span> - {p.name}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Actions */}
+                          <div className="flex gap-2">
+                            <button 
+                              onClick={() => {
+                                setInput(`What bundles use product ${impact.productCode} "${impact.productName}" and what would happen if we removed it?`);
+                                setActiveTab('chat');
+                              }}
+                              className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 text-sm"
+                            >
+                              🤖 Ask AI About This Product
+                            </button>
+                            <button 
+                              onClick={() => {
+                                const csv = impact.affectedBundles.map(b => `${b.ID},${b.Name},${b.On_going_Monthly_Price}`).join('\n');
+                                const blob = new Blob([`ID,Name,Price\n${csv}`], { type: 'text/csv' });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = `bundles_using_${impact.productCode}.csv`;
+                                a.click();
+                              }}
+                              className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm"
+                            >
+                              📥 Export Affected Bundles
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
               </div>
