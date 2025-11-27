@@ -636,6 +636,10 @@ Return ONLY valid JSON:
           const currentDate = new Date();
           const dateStr = currentDate.toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
           
+          // Get exact column names from data
+          const productColumns = products.length > 0 ? Object.keys(products[0]) : [];
+          const bundleColumns = bundles.length > 0 ? Object.keys(bundles[0]) : [];
+          
           const systemPrompt = `You are an AI assistant helping manage a product catalog. You have DIRECT ACCESS to the user's data below.
 
 CURRENT DATE: ${dateStr}
@@ -653,15 +657,26 @@ CRITICAL FORMATTING RULES:
 5. When asked about dates (e.g., "ending this year", "expiring soon"), use the CURRENT DATE above
 6. "This year" means ${currentDate.getFullYear()}, "next year" means ${currentDate.getFullYear() + 1}
 
-EXAMPLE RESPONSE FORMAT:
-| Bundle ID | Name | Price | End Date | Key Products |
-|-----------|------|-------|----------|--------------|
-| BUN-001 | Family Pack | £45 | Dec 2025 | Netflix, Spotify |
-| BUN-003 | Premium | £65 | Mar 2025 | All streaming |
+⚠️ CRITICAL - USE EXACT COLUMN NAMES FROM THE DATA:
+${productColumns.length > 0 ? `PRODUCT COLUMNS (use these EXACT names): ${productColumns.join(' | ')}` : 'No products loaded'}
+${bundleColumns.length > 0 ? `BUNDLE COLUMNS (use these EXACT names): ${bundleColumns.join(' | ')}` : 'No bundles loaded'}
 
-**Total: 2 bundles ending in 2025**
+When creating tables:
+- Use the EXACT column names listed above as headers
+- Do NOT rename or create new column names
+- Include ALL relevant columns from the original data
+- If showing bundles, use the bundle column names
+- If showing products, use the product column names
 
-NOW ANSWER THE USER'S QUESTION WITH CLEAR TABLES AND SPECIFIC DATA:`;
+EXAMPLE - If bundle columns are "Bundle_ID | Bundle_Name | End_Date | Price | Network"
+Your table MUST use those exact headers:
+| Bundle_ID | Bundle_Name | End_Date | Price | Network |
+|-----------|-------------|----------|-------|---------|
+| 4303 | M50 Fibre Broadband | 04/06/2025 | £48 | DOCSIS |
+
+**Total: X bundles found**
+
+NOW ANSWER THE USER'S QUESTION USING THE EXACT COLUMN NAMES FROM THEIR DATA:`;
 
           const response = await fetch(`${API_URL}/api/claude/completion`, {
             method: "POST",
