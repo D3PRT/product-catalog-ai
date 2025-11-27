@@ -11,20 +11,86 @@
   <script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          },
+        },
+      },
+    }
+  </script>
   <style>
-    .dark { background-color: #1a1a2e; color: #eaeaea; }
-    .dark .bg-white { background-color: #16213e !important; }
-    .dark .bg-gray-50 { background-color: #1a1a2e !important; }
-    .dark .bg-gray-100 { background-color: #1f2937 !important; }
-    .dark .text-gray-800 { color: #eaeaea !important; }
-    .dark .text-gray-700 { color: #d1d5db !important; }
-    .dark .text-gray-600 { color: #9ca3af !important; }
-    .dark .text-gray-500 { color: #9ca3af !important; }
-    .dark .border-gray-200 { border-color: #374151 !important; }
-    .dark .border-gray-300 { border-color: #4b5563 !important; }
-    .dark input, .dark select { background-color: #1f2937 !important; color: #eaeaea !important; border-color: #4b5563 !important; }
-    .dark .hover\:bg-gray-50:hover { background-color: #1f2937 !important; }
-    .dark .bg-purple-50, .dark .bg-blue-50, .dark .bg-green-50, .dark .bg-yellow-50, .dark .bg-orange-50 { background-color: rgba(139, 92, 246, 0.1) !important; }
+    * { font-family: 'Inter', system-ui, sans-serif; }
+    
+    /* Smooth transitions */
+    * { transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease; }
+    
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    
+    /* Glass morphism effect */
+    .glass { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+    
+    /* Subtle shadows */
+    .shadow-soft { box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.05), 0 4px 16px -4px rgba(0, 0, 0, 0.1); }
+    .shadow-elevated { box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.08), 0 8px 24px -4px rgba(0, 0, 0, 0.12); }
+    
+    /* Gradient text */
+    .gradient-text { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    
+    /* Button hover effects */
+    .btn-primary { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); transition: all 0.2s ease; }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4); }
+    .btn-primary:active { transform: translateY(0); }
+    
+    /* Card hover */
+    .card-hover:hover { transform: translateY(-2px); box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.15); }
+    
+    /* Input focus */
+    input:focus, select:focus, textarea:focus { outline: none; box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15); }
+    
+    /* Pill buttons */
+    .pill { padding: 6px 14px; border-radius: 9999px; font-size: 13px; font-weight: 500; transition: all 0.15s ease; }
+    .pill:hover { transform: scale(1.02); }
+    
+    /* Table styles */
+    .table-modern th { font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 0.05em; color: #64748b; }
+    .table-modern td { font-size: 14px; }
+    .table-modern tr:hover td { background: #f8fafc; }
+    
+    /* Animations */
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes pulse-soft { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+    .animate-fadeIn { animation: fadeIn 0.3s ease forwards; }
+    .animate-pulse-soft { animation: pulse-soft 2s ease-in-out infinite; }
+    
+    /* Dark mode */
+    .dark { background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); color: #e2e8f0; }
+    .dark .glass { background: rgba(30, 41, 59, 0.8); }
+    .dark .bg-white { background-color: #1e293b !important; }
+    .dark .bg-gray-50 { background-color: #0f172a !important; }
+    .dark .bg-slate-50 { background-color: #1e293b !important; }
+    .dark .text-gray-900 { color: #f1f5f9 !important; }
+    .dark .text-gray-800 { color: #e2e8f0 !important; }
+    .dark .text-gray-700 { color: #cbd5e1 !important; }
+    .dark .text-gray-600 { color: #94a3b8 !important; }
+    .dark .text-gray-500 { color: #64748b !important; }
+    .dark .border-gray-200 { border-color: #334155 !important; }
+    .dark .border-gray-100 { border-color: #1e293b !important; }
+    .dark .border-slate-200 { border-color: #334155 !important; }
+    .dark input, .dark select { background-color: #1e293b !important; color: #e2e8f0 !important; border-color: #475569 !important; }
+    .dark .shadow-soft { box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.3), 0 4px 16px -4px rgba(0, 0, 0, 0.4); }
+    .dark ::-webkit-scrollbar-track { background: #1e293b; }
+    .dark ::-webkit-scrollbar-thumb { background: #475569; }
   </style>
 </head>
 <body>
@@ -1521,37 +1587,85 @@ NOW ANSWER THE USER'S QUESTION USING THE EXACT COLUMN NAMES FROM THEIR DATA:`;
       // LOGIN SCREEN
       if (!isAuthenticated) {
         return (
-          <div className={`min-h-screen flex items-center justify-center p-4 ${darkMode ? 'dark bg-gray-900' : 'bg-gradient-to-br from-purple-600 via-blue-600 to-indigo-700'}`}>
-            <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
+          <div className={`min-h-screen flex items-center justify-center p-4 ${darkMode ? 'dark' : 'bg-gradient-to-br from-slate-50 via-indigo-50 to-purple-50'}`}>
+            <div className="absolute inset-0 overflow-hidden pointer-events-none">
+              <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse-soft"></div>
+              <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-indigo-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse-soft" style={{animationDelay: '1s'}}></div>
+            </div>
+            
+            <div className="relative bg-white rounded-2xl shadow-elevated p-8 max-w-md w-full border border-slate-100">
               <div className="text-center mb-8">
-                <div className="text-6xl mb-4">🤖</div>
-                <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">AI Product Catalog</h1>
-                <p className="text-gray-500 mt-2">Sign in to access AI features</p>
+                <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl mb-4 shadow-lg">
+                  <span className="text-3xl">📊</span>
+                </div>
+                <h1 className="text-2xl font-bold text-gray-900 mb-1">Product Catalog AI</h1>
+                <p className="text-gray-500 text-sm">Sign in to your workspace</p>
               </div>
 
-              <form onSubmit={handleLogin} className="space-y-4">
-                {loginError && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{loginError}</div>}
+              <form onSubmit={handleLogin} className="space-y-5">
+                {loginError && (
+                  <div className="flex items-center gap-2 bg-red-50 border border-red-100 text-red-600 px-4 py-3 rounded-xl text-sm">
+                    <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd"/></svg>
+                    {loginError}
+                  </div>
+                )}
+                
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Username</label>
-                  <input type="text" value={loginForm.username} onChange={(e) => setLoginForm({...loginForm, username: e.target.value})} className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="Enter username" required />
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Username</label>
+                  <input 
+                    type="text" 
+                    value={loginForm.username} 
+                    onChange={(e) => setLoginForm({...loginForm, username: e.target.value})} 
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:bg-white" 
+                    placeholder="Enter your username" 
+                    required 
+                  />
                 </div>
+                
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Password</label>
-                  <input type="password" value={loginForm.password} onChange={(e) => setLoginForm({...loginForm, password: e.target.value})} className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="Enter password" required />
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
+                  <input 
+                    type="password" 
+                    value={loginForm.password} 
+                    onChange={(e) => setLoginForm({...loginForm, password: e.target.value})} 
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:bg-white" 
+                    placeholder="Enter your password" 
+                    required 
+                  />
                 </div>
-                <div className="flex items-center">
-                  <input type="checkbox" id="rememberMe" checked={loginForm.rememberMe} onChange={(e) => setLoginForm({...loginForm, rememberMe: e.target.checked})} className="h-4 w-4 text-purple-600" />
-                  <label htmlFor="rememberMe" className="ml-2 text-sm text-gray-600">Remember me</label>
+                
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={loginForm.rememberMe} 
+                      onChange={(e) => setLoginForm({...loginForm, rememberMe: e.target.checked})} 
+                      className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500" 
+                    />
+                    <span className="text-sm text-gray-600">Remember me</span>
+                  </label>
                 </div>
-                <button type="submit" disabled={isLoggingIn} className="w-full py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg font-semibold hover:from-purple-700 hover:to-blue-700 disabled:opacity-50">
-                  {isLoggingIn ? 'Signing in...' : 'Sign In'}
+                
+                <button 
+                  type="submit" 
+                  disabled={isLoggingIn} 
+                  className="w-full py-3 btn-primary text-white rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                >
+                  {isLoggingIn ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                      Signing in...
+                    </span>
+                  ) : 'Sign In'}
                 </button>
               </form>
 
-              <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-                <p className="text-sm text-blue-800 font-medium mb-2">🔐 Default Credentials:</p>
-                <p className="text-xs text-blue-700">Admin: admin / admin123</p>
-                <p className="text-xs text-blue-700">Demo: demo / demo123</p>
+              <div className="mt-6 pt-6 border-t border-slate-100">
+                <p className="text-xs text-gray-500 text-center mb-3">Demo credentials</p>
+                <div className="flex gap-2 justify-center">
+                  <button onClick={() => setLoginForm({username: 'admin', password: 'admin123', rememberMe: false})} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-medium text-gray-600">admin / admin123</button>
+                  <button onClick={() => setLoginForm({username: 'demo', password: 'demo123', rememberMe: false})} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-medium text-gray-600">demo / demo123</button>
+                </div>
               </div>
             </div>
           </div>
@@ -1560,76 +1674,130 @@ NOW ANSWER THE USER'S QUESTION USING THE EXACT COLUMN NAMES FROM THEIR DATA:`;
 
       // MAIN APP
       return (
-        <div className={`min-h-screen ${darkMode ? 'dark bg-gray-900' : 'bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100'}`}>
-          <div className="container mx-auto px-4 py-6 max-w-7xl">
-            
-            {/* Header */}
-            <div className="bg-white rounded-xl shadow-xl p-6 mb-6 border-t-4 border-purple-500">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent mb-2">🤖 AI Product Catalog Manager</h1>
-                  <p className="text-gray-600">AI-powered catalog management • Create, analyze, and optimize</p>
-                </div>
-                <div className="text-right flex items-center gap-4">
-                  <button onClick={toggleDarkMode} className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200" title="Toggle dark mode">
-                    {darkMode ? '☀️' : '🌙'}
-                  </button>
-                  <div>
-                    <div className="flex items-center gap-3 mb-2">
-                      <span className="text-sm text-gray-600">👤 {user?.username}</span>
-                      <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-semibold">{user?.role}</span>
-                      <button onClick={handleLogout} className="text-sm text-red-600 hover:text-red-800 underline">Logout</button>
-                    </div>
-                    <div className="text-sm text-gray-500">{products.length} products • {bundles.length} bundles</div>
+        <div className={`min-h-screen ${darkMode ? 'dark' : 'bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100'}`}>
+          {/* Top Navigation Bar */}
+          <nav className="sticky top-0 z-50 glass border-b border-slate-200/50">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6">
+              <div className="flex items-center justify-between h-16">
+                {/* Logo & Title */}
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200">
+                    <span className="text-xl">📊</span>
                   </div>
+                  <div className="hidden sm:block">
+                    <h1 className="text-lg font-bold text-gray-900">Product Catalog</h1>
+                    <p className="text-xs text-gray-500 -mt-0.5">AI-Powered Management</p>
+                  </div>
+                </div>
+                
+                {/* Center Search */}
+                <div className="flex-1 max-w-xl mx-4">
+                  <div className="relative">
+                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                    <input 
+                      ref={searchInputRef} 
+                      type="text" 
+                      value={searchQuery} 
+                      onChange={(e) => setSearchQuery(e.target.value)} 
+                      placeholder="Search products, bundles... ⌘K" 
+                      className="w-full pl-10 pr-4 py-2.5 bg-slate-100 border-0 rounded-xl text-sm text-gray-900 placeholder-gray-500 focus:bg-white focus:ring-2 focus:ring-indigo-500" 
+                    />
+                    {searchQuery && (
+                      <button onClick={clearSearch} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                      </button>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Right Actions */}
+                <div className="flex items-center gap-2">
+                  <button onClick={toggleDarkMode} className="p-2 rounded-xl hover:bg-slate-100 text-gray-500" title="Toggle theme">
+                    {darkMode ? <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clipRule="evenodd"/></svg> : <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/></svg>}
+                  </button>
+                  
+                  <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-xl">
+                    <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-lg flex items-center justify-center text-white text-sm font-semibold">
+                      {user?.username?.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="text-sm">
+                      <p className="font-medium text-gray-900">{user?.username}</p>
+                      <p className="text-xs text-gray-500">{user?.role}</p>
+                    </div>
+                  </div>
+                  
+                  <button onClick={handleLogout} className="p-2 rounded-xl hover:bg-red-50 text-gray-400 hover:text-red-500" title="Logout">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </nav>
+          
+          {/* Search Results Dropdown */}
+          {showSearchResults && (searchResults.products.length > 0 || searchResults.bundles.length > 0) && (
+            <div className="fixed top-20 left-1/2 -translate-x-1/2 w-full max-w-xl bg-white rounded-2xl shadow-elevated border border-slate-200 z-50 max-h-96 overflow-y-auto animate-fadeIn">
+              <div className="p-4">
+                <div className="flex justify-between items-center mb-3">
+                  <span className="text-sm font-semibold text-gray-900">Search Results</span>
+                  <button onClick={() => setShowSearchResults(false)} className="text-gray-400 hover:text-gray-600">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                  </button>
+                </div>
+                {searchResults.products.length > 0 && (
+                  <div className="mb-4">
+                    <p className="text-xs font-semibold text-indigo-600 mb-2">Products ({searchResults.products.length})</p>
+                    {searchResults.products.slice(0, 5).map((product, idx) => (
+                      <div key={idx} className="p-2.5 hover:bg-slate-50 rounded-xl flex justify-between items-center cursor-pointer">
+                        <span className="text-sm text-gray-700">{product[Object.keys(product)[0]]}</span>
+                        <button onClick={() => addToCompare(product, 'product')} className="pill bg-indigo-50 text-indigo-600 hover:bg-indigo-100 text-xs">+ Compare</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {searchResults.bundles.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-purple-600 mb-2">Bundles ({searchResults.bundles.length})</p>
+                    {searchResults.bundles.slice(0, 5).map((bundle, idx) => (
+                      <div key={idx} className="p-2.5 hover:bg-slate-50 rounded-xl flex justify-between items-center cursor-pointer">
+                        <span className="text-sm text-gray-700">{bundle[Object.keys(bundle)[0]]}</span>
+                        <button onClick={() => addToCompare(bundle, 'bundle')} className="pill bg-purple-50 text-purple-600 hover:bg-purple-100 text-xs">+ Compare</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+            {/* Quick Stats Bar */}
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-white rounded-xl shadow-soft border border-slate-100">
+                  <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+                  <span className="text-sm text-gray-600">Connected</span>
+                </div>
+                <div className="flex items-center gap-3 text-sm text-gray-500">
+                  <span className="flex items-center gap-1.5"><span className="text-indigo-600 font-semibold">{products.length}</span> products</span>
+                  <span className="text-gray-300">•</span>
+                  <span className="flex items-center gap-1.5"><span className="text-purple-600 font-semibold">{bundles.length}</span> bundles</span>
                 </div>
               </div>
               
-              {/* Search Bar */}
-              <div className="relative">
-                <div className="flex gap-2">
-                  <div className="flex-1 relative">
-                    <div className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400">🔍</div>
-                    <input ref={searchInputRef} type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search products, bundles... (Cmd+K)" className="w-full pl-12 pr-12 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-lg" />
-                    {searchQuery && <button onClick={clearSearch} className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xl">✕</button>}
-                  </div>
-                  <button onClick={() => setShowCharts(!showCharts)} className={`px-4 py-2 rounded-lg font-semibold ${showCharts ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>📊 Charts</button>
-                  <button onClick={() => setShowCompare(!showCompare)} className={`px-4 py-2 rounded-lg font-semibold ${showCompare ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>⚖️ Compare {compareItems.length > 0 && `(${compareItems.length})`}</button>
-                  <button onClick={() => setShowImpactAnalysis(!showImpactAnalysis)} className={`px-4 py-2 rounded-lg font-semibold ${showImpactAnalysis ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>💥 Impact</button>
-                </div>
-                
-                {showSearchResults && (searchResults.products.length > 0 || searchResults.bundles.length > 0) && (
-                  <div className="absolute top-full left-0 right-0 mt-2 bg-white border-2 border-purple-200 rounded-lg shadow-2xl z-50 max-h-96 overflow-y-auto">
-                    <div className="p-4">
-                      <div className="flex justify-between items-center mb-3">
-                        <div className="font-bold text-lg">Search Results</div>
-                        <button onClick={() => setShowSearchResults(false)} className="text-gray-400 hover:text-gray-600">✕</button>
-                      </div>
-                      {searchResults.products.length > 0 && (
-                        <div className="mb-4">
-                          <div className="font-semibold text-purple-600 mb-2">Products ({searchResults.products.length})</div>
-                          {searchResults.products.slice(0, 5).map((product, idx) => (
-                            <div key={idx} className="p-2 hover:bg-purple-50 rounded border border-gray-100 mb-1 flex justify-between items-center">
-                              <div className="font-medium">{product[Object.keys(product)[0]]}</div>
-                              <button onClick={() => addToCompare(product, 'product')} className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200">+ Compare</button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      {searchResults.bundles.length > 0 && (
-                        <div>
-                          <div className="font-semibold text-blue-600 mb-2">Bundles ({searchResults.bundles.length})</div>
-                          {searchResults.bundles.slice(0, 5).map((bundle, idx) => (
-                            <div key={idx} className="p-2 hover:bg-blue-50 rounded border border-gray-100 mb-1 flex justify-between items-center">
-                              <div className="font-medium">{bundle[Object.keys(bundle)[0]]}</div>
-                              <button onClick={() => addToCompare(bundle, 'bundle')} className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200">+ Compare</button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
+              <div className="flex items-center gap-2">
+                <button onClick={() => setShowCharts(!showCharts)} className={`pill ${showCharts ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 border border-slate-200 hover:border-indigo-300'}`}>
+                  <span className="flex items-center gap-1.5"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg> Charts</span>
+                </button>
+                <button onClick={() => setShowCompare(!showCompare)} className={`pill ${showCompare ? 'bg-purple-600 text-white' : 'bg-white text-gray-600 border border-slate-200 hover:border-purple-300'}`}>
+                  <span className="flex items-center gap-1.5"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg> Compare {compareItems.length > 0 && `(${compareItems.length})`}</span>
+                </button>
+                <button onClick={() => setShowImpactAnalysis(!showImpactAnalysis)} className={`pill ${showImpactAnalysis ? 'bg-rose-600 text-white' : 'bg-white text-gray-600 border border-slate-200 hover:border-rose-300'}`}>
+                  <span className="flex items-center gap-1.5"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg> Impact</span>
+                </button>
+                <button onClick={resetOnboarding} className="pill bg-white text-gray-600 border border-slate-200 hover:border-slate-300">
+                  <span className="flex items-center gap-1.5"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg> Help</span>
+                </button>
               </div>
             </div>
 
@@ -1953,47 +2121,88 @@ NOW ANSWER THE USER'S QUESTION USING THE EXACT COLUMN NAMES FROM THEIR DATA:`;
               </div>
             )}
 
-            {/* Status Bar */}
-            <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-6 flex items-center justify-between">
-              <span className="text-green-800 text-sm font-medium">✅ AI Enabled - Secure Connection</span>
-              <div className="flex items-center gap-4">
-                <button onClick={resetOnboarding} className="text-xs text-purple-600 hover:text-purple-800 font-medium">📖 Show Tutorial</button>
-                <span className="text-xs text-green-600">Today: {new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</span>
-              </div>
-            </div>
-
             {/* Onboarding Wizard - Show when no data and onboarding not complete */}
             {showOnboarding && products.length === 0 && bundles.length === 0 && (
               <OnboardingWizard />
             )}
-
-            {/* File Upload */}
-            <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+            
+            {/* File Upload - Compact Design */}
+            <div className="bg-white rounded-2xl shadow-soft border border-slate-100 p-5 mb-6">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold text-gray-800">📁 Upload Your Data</h2>
-                <span className="text-sm text-green-800 bg-green-50 px-3 py-1 rounded-full">📊 Excel & CSV</span>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-xl flex items-center justify-center">
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+                  </div>
+                  <div>
+                    <h2 className="font-semibold text-gray-900">Upload Data</h2>
+                    <p className="text-xs text-gray-500">Excel (.xlsx) or CSV files</p>
+                  </div>
+                </div>
               </div>
+              
               <div className="grid md:grid-cols-2 gap-4">
-                <div className="border-2 border-dashed border-purple-300 rounded-lg p-4 hover:border-purple-500 transition bg-gradient-to-br from-purple-50 to-white">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Products {products.length > 0 && <span className="text-green-600">✓ {products.length}</span>}</label>
-                  <input type="file" accept=".csv,.xlsx,.xls" onChange={(e) => handleFileUpload(e, 'products')} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 cursor-pointer" />
-                </div>
-                <div className="border-2 border-dashed border-blue-300 rounded-lg p-4 hover:border-blue-500 transition bg-gradient-to-br from-blue-50 to-white">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Bundles {bundles.length > 0 && <span className="text-green-600">✓ {bundles.length}</span>}</label>
-                  <input type="file" accept=".csv,.xlsx,.xls" onChange={(e) => handleFileUpload(e, 'bundles')} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer" />
-                </div>
+                <label className="group cursor-pointer">
+                  <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 hover:border-indigo-400 hover:bg-indigo-50/50 transition-all">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center group-hover:bg-indigo-200 transition-colors">
+                        <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-900">Products</p>
+                        <p className="text-xs text-gray-500">{products.length > 0 ? `✓ ${products.length} loaded` : 'No file selected'}</p>
+                      </div>
+                      {products.length > 0 && <span className="w-6 h-6 bg-emerald-100 rounded-full flex items-center justify-center"><svg className="w-4 h-4 text-emerald-600" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg></span>}
+                    </div>
+                    <input type="file" accept=".csv,.xlsx,.xls" onChange={(e) => handleFileUpload(e, 'products')} className="hidden" />
+                  </div>
+                </label>
+                
+                <label className="group cursor-pointer">
+                  <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 hover:border-purple-400 hover:bg-purple-50/50 transition-all">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center group-hover:bg-purple-200 transition-colors">
+                        <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-900">Bundles</p>
+                        <p className="text-xs text-gray-500">{bundles.length > 0 ? `✓ ${bundles.length} loaded` : 'No file selected'}</p>
+                      </div>
+                      {bundles.length > 0 && <span className="w-6 h-6 bg-emerald-100 rounded-full flex items-center justify-center"><svg className="w-4 h-4 text-emerald-600" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg></span>}
+                    </div>
+                    <input type="file" accept=".csv,.xlsx,.xls" onChange={(e) => handleFileUpload(e, 'bundles')} className="hidden" />
+                  </div>
+                </label>
               </div>
             </div>
 
             {/* Tabs */}
-            <div className="bg-white rounded-xl shadow-lg mb-6 overflow-hidden">
-              <div className="flex border-b border-gray-200">
-                {['chat', 'products', 'bundles', 'create'].map((tab) => (
-                  <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 px-6 py-4 font-semibold transition ${activeTab === tab ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
-                    {tab === 'chat' && '💬 AI Chat'}
-                    {tab === 'products' && `📦 Products (${products.length})`}
-                    {tab === 'bundles' && `🎁 Bundles (${bundles.length})`}
-                    {tab === 'create' && '➕ Create'}
+            <div className="bg-white rounded-2xl shadow-soft border border-slate-100 overflow-hidden">
+              <div className="flex border-b border-slate-100">
+                {[
+                  { id: 'chat', label: 'AI Chat', icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg> },
+                  { id: 'products', label: `Products`, count: products.length, icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg> },
+                  { id: 'bundles', label: `Bundles`, count: bundles.length, icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg> },
+                  { id: 'create', label: 'Create', icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"/></svg> }
+                ].map((tab) => (
+                  <button 
+                    key={tab.id} 
+                    onClick={() => setActiveTab(tab.id)} 
+                    className={`flex-1 flex items-center justify-center gap-2 px-6 py-4 text-sm font-medium transition-all relative ${
+                      activeTab === tab.id 
+                        ? 'text-indigo-600' 
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    {tab.icon}
+                    <span>{tab.label}</span>
+                    {tab.count !== undefined && (
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${activeTab === tab.id ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-gray-500'}`}>
+                        {tab.count}
+                      </span>
+                    )}
+                    {activeTab === tab.id && (
+                      <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600"></span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -2002,28 +2211,38 @@ NOW ANSWER THE USER'S QUESTION USING THE EXACT COLUMN NAMES FROM THEIR DATA:`;
                 {/* Chat Tab */}
                 {activeTab === 'chat' && (
                   <div>
-                    {/* Chat Header with Export */}
+                    {/* Chat Header */}
                     <div className="flex justify-between items-center mb-4">
-                      <h3 className="font-semibold text-gray-700">AI Assistant</h3>
-                      <div className="flex gap-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
+                          <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-gray-900">AI Assistant</h3>
+                          <p className="text-xs text-gray-500">Ask anything about your data</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
                         {messages.length > 0 && (
-                          <button onClick={exportChat} className="text-sm px-3 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200">📥 Export Chat</button>
+                          <button onClick={exportChat} className="pill bg-slate-100 text-gray-600 hover:bg-slate-200">
+                            <span className="flex items-center gap-1.5"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg> Export</span>
+                          </button>
                         )}
-                        <button onClick={() => setShowPromptLibrary(!showPromptLibrary)} className={`text-sm px-3 py-1 rounded font-medium ${showPromptLibrary ? 'bg-purple-600 text-white' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'}`}>
-                          💡 {showPromptLibrary ? 'Hide' : 'Show'} Prompts
+                        <button onClick={() => setShowPromptLibrary(!showPromptLibrary)} className={`pill ${showPromptLibrary ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}>
+                          <span className="flex items-center gap-1.5"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg> Prompts</span>
                         </button>
                       </div>
                     </div>
                     
                     {/* Favorite Prompts */}
                     {favoritePrompts.length > 0 && (
-                      <div className="mb-4 p-3 bg-yellow-50 rounded-lg">
-                        <p className="text-xs font-semibold text-yellow-700 mb-2">⭐ Your Favorites</p>
+                      <div className="mb-4 p-3 bg-amber-50 rounded-xl border border-amber-100">
+                        <p className="text-xs font-semibold text-amber-700 mb-2 flex items-center gap-1"><svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg> Favorites</p>
                         <div className="flex flex-wrap gap-2">
                           {favoritePrompts.map((prompt, idx) => (
-                            <div key={idx} className="flex items-center gap-1">
-                              <button onClick={() => setInput(prompt)} className="px-3 py-1 bg-white text-yellow-800 rounded-full text-xs hover:bg-yellow-100 border border-yellow-300">{prompt.substring(0, 30)}...</button>
-                              <button onClick={() => toggleFavoritePrompt(prompt)} className="text-yellow-600 hover:text-yellow-800 text-xs">✕</button>
+                            <div key={idx} className="flex items-center gap-1 bg-white rounded-lg border border-amber-200 overflow-hidden">
+                              <button onClick={() => setInput(prompt)} className="px-3 py-1.5 text-xs text-amber-800 hover:bg-amber-100">{prompt.substring(0, 30)}...</button>
+                              <button onClick={() => toggleFavoritePrompt(prompt)} className="px-2 py-1.5 text-amber-400 hover:text-amber-600 hover:bg-amber-100">×</button>
                             </div>
                           ))}
                         </div>
@@ -2180,25 +2399,35 @@ NOW ANSWER THE USER'S QUESTION USING THE EXACT COLUMN NAMES FROM THEIR DATA:`;
                       </div>
                     )}
                     
-                    <div className="h-96 overflow-y-auto mb-4 space-y-4 p-4 bg-gray-50 rounded-lg">
+                    <div className="h-96 overflow-y-auto mb-4 space-y-4 p-4 bg-slate-50 rounded-xl">
                       {messages.length === 0 ? (
                         <div className="text-center text-gray-500 mt-8">
-                          <p className="text-lg mb-2">👋 Ask me anything about your catalog!</p>
-                          <p className="text-sm mb-4 text-gray-400">
-                            {products.length === 0 && bundles.length === 0 ? "Upload your products or bundles to get started" : `I have access to ${products.length} products and ${bundles.length} bundles`}
+                          <div className="w-16 h-16 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                            <svg className="w-8 h-8 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+                          </div>
+                          <p className="text-lg font-medium text-gray-700 mb-1">Start a conversation</p>
+                          <p className="text-sm text-gray-500 mb-4">
+                            {products.length === 0 && bundles.length === 0 ? "Upload your data to get started" : `Ready to analyze ${products.length} products and ${bundles.length} bundles`}
                           </p>
-                          <button onClick={() => setShowPromptLibrary(true)} className="px-4 py-2 bg-purple-100 text-purple-700 rounded-full font-medium hover:bg-purple-200">
-                            💡 Browse Prompt Library
+                          <button onClick={() => setShowPromptLibrary(true)} className="pill bg-indigo-50 text-indigo-600 hover:bg-indigo-100">
+                            <span className="flex items-center gap-1.5"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg> Browse Prompt Library</span>
                           </button>
                         </div>
                       ) : (
                         messages.map((msg, idx) => (
-                          <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                            <div className={`max-w-4xl px-4 py-3 rounded-lg shadow-md ${msg.role === 'user' ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white' : msg.role === 'system' ? 'bg-yellow-50 text-yellow-800 border border-yellow-200' : 'bg-white text-gray-800 border border-gray-200'}`}>
+                          <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fadeIn`}>
+                            <div className={`max-w-4xl px-4 py-3 rounded-2xl ${
+                              msg.role === 'user' 
+                                ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white' 
+                                : msg.role === 'system' 
+                                ? 'bg-amber-50 text-amber-800 border border-amber-200' 
+                                : 'bg-white text-gray-800 shadow-soft border border-slate-100'
+                            }`}>
                               {msg.role === 'assistant' ? renderFormattedMessage(msg.content) : <pre className="whitespace-pre-wrap font-sans text-sm">{msg.content}</pre>}
                               {msg.role === 'user' && (
-                                <button onClick={() => toggleFavoritePrompt(msg.content)} className="mt-2 text-xs opacity-70 hover:opacity-100" title={favoritePrompts.includes(msg.content) ? 'Remove from favorites' : 'Add to favorites'}>
-                                  {favoritePrompts.includes(msg.content) ? '⭐' : '☆'} Favorite
+                                <button onClick={() => toggleFavoritePrompt(msg.content)} className="mt-2 text-xs opacity-70 hover:opacity-100 flex items-center gap-1" title={favoritePrompts.includes(msg.content) ? 'Remove from favorites' : 'Add to favorites'}>
+                                  <svg className="w-3 h-3" fill={favoritePrompts.includes(msg.content) ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg>
+                                  {favoritePrompts.includes(msg.content) ? 'Saved' : 'Save'}
                                 </button>
                               )}
                             </div>
@@ -2206,12 +2435,12 @@ NOW ANSWER THE USER'S QUESTION USING THE EXACT COLUMN NAMES FROM THEIR DATA:`;
                         ))
                       )}
                       {isLoading && (
-                        <div className="flex justify-start">
-                          <div className="bg-white px-4 py-3 rounded-lg shadow-md border border-gray-200">
-                            <div className="flex items-center space-x-2">
-                              <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce"></div>
-                              <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-                              <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                        <div className="flex justify-start animate-fadeIn">
+                          <div className="bg-white px-4 py-3 rounded-2xl shadow-soft border border-slate-100">
+                            <div className="flex items-center gap-1">
+                              <span className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{animationDelay: '0ms'}}></span>
+                              <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{animationDelay: '150ms'}}></span>
+                              <span className="w-2 h-2 bg-indigo-300 rounded-full animate-bounce" style={{animationDelay: '300ms'}}></span>
                             </div>
                           </div>
                         </div>
@@ -2219,9 +2448,28 @@ NOW ANSWER THE USER'S QUESTION USING THE EXACT COLUMN NAMES FROM THEIR DATA:`;
                       <div ref={messagesEndRef} />
                     </div>
 
-                    <form onSubmit={handleSubmit} className="flex gap-2">
-                      <input type="text" value={input} onChange={(e) => setInput(e.target.value)} placeholder="Ask me anything about your data..." className="flex-1 px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" />
-                      <button type="submit" disabled={!input.trim() || isLoading} className="px-8 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-semibold shadow-md">Send</button>
+                    <form onSubmit={handleSubmit} className="flex gap-3">
+                      <div className="flex-1 relative">
+                        <input 
+                          type="text" 
+                          value={input} 
+                          onChange={(e) => setInput(e.target.value)} 
+                          placeholder="Ask anything about your data..." 
+                          className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-gray-900 placeholder-gray-400 focus:bg-white focus:border-indigo-500" 
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={!input.trim() || isLoading}
+                        className="px-6 py-3.5 btn-primary text-white rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center gap-2"
+                      >
+                        {isLoading ? (
+                          <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                        ) : (
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+                        )}
+                        <span className="hidden sm:inline">{isLoading ? 'Thinking...' : 'Send'}</span>
+                      </button>
                     </form>
                     
                     {(products.length > 0 || bundles.length > 0) && messages.length > 0 && (
@@ -2541,6 +2789,8 @@ NOW ANSWER THE USER'S QUESTION USING THE EXACT COLUMN NAMES FROM THEIR DATA:`;
               </div>
             )}
 
+</div>
+            </div>
           </div>
         </div>
       );
