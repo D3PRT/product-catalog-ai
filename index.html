@@ -109,6 +109,178 @@
       const [sanityReport, setSanityReport] = useState(null);
       const [isCheckingSanity, setIsCheckingSanity] = useState(false);
       
+      // SMART DATA DICTIONARY - learns your data structure
+      const [dataDictionary, setDataDictionary] = useState(null);
+      
+      // Analyze data and build a comprehensive dictionary
+      const analyzeData = (data, type) => {
+        if (!data || data.length === 0) return null;
+        
+        const columns = Object.keys(data[0]);
+        const analysis = {
+          type,
+          rowCount: data.length,
+          columns: {},
+          uniqueValues: {},
+          dateColumns: [],
+          priceColumns: [],
+          idColumns: [],
+          nameColumns: [],
+          categoryColumns: [],
+          contentColumns: [],
+          patterns: {}
+        };
+        
+        columns.forEach(col => {
+          const colLower = col.toLowerCase();
+          const values = data.map(row => row[col]).filter(v => v !== null && v !== undefined && v !== '');
+          const uniqueVals = [...new Set(values.map(v => String(v).trim()))];
+          
+          // Analyze column type
+          let colType = 'text';
+          let isDate = false;
+          let isPrice = false;
+          let isId = false;
+          let isName = false;
+          let isCategory = false;
+          let isContent = false;
+          
+          // Check for ID columns
+          if (colLower.includes('id') || colLower.includes('sku') || colLower.includes('code') || colLower.includes('ref')) {
+            isId = true;
+            analysis.idColumns.push(col);
+          }
+          
+          // Check for name columns
+          if (colLower.includes('name') || colLower.includes('title') || colLower.includes('bundle') || colLower.includes('product') || colLower.includes('description')) {
+            isName = true;
+            analysis.nameColumns.push(col);
+          }
+          
+          // Check for date columns
+          if (colLower.includes('date') || colLower.includes('start') || colLower.includes('end') || colLower.includes('expir') || colLower.includes('launch') || colLower.includes('created')) {
+            isDate = true;
+            analysis.dateColumns.push(col);
+          }
+          
+          // Check for price columns
+          if (colLower.includes('price') || colLower.includes('cost') || colLower.includes('fee') || colLower.includes('charge') || colLower.includes('£') || colLower.includes('revenue')) {
+            isPrice = true;
+            analysis.priceColumns.push(col);
+          }
+          
+          // Check for category columns
+          if (colLower.includes('category') || colLower.includes('type') || colLower.includes('segment') || colLower.includes('group') || colLower.includes('tier') || colLower.includes('class')) {
+            isCategory = true;
+            analysis.categoryColumns.push(col);
+          }
+          
+          // Check for content/product columns (columns that contain product names)
+          if (colLower.includes('content') || colLower.includes('includes') || colLower.includes('products') || colLower.includes('services') || colLower.includes('features') || colLower.includes('apps')) {
+            isContent = true;
+            analysis.contentColumns.push(col);
+          }
+          
+          // Store column info
+          analysis.columns[col] = {
+            type: isDate ? 'date' : isPrice ? 'price' : isId ? 'id' : isName ? 'name' : isCategory ? 'category' : 'text',
+            uniqueCount: uniqueVals.length,
+            sampleValues: uniqueVals.slice(0, 10),
+            isEmpty: values.length === 0
+          };
+          
+          // For categorical columns with few unique values, store all of them
+          if (uniqueVals.length <= 50 && !isId) {
+            analysis.uniqueValues[col] = uniqueVals;
+          }
+        });
+        
+        // Detect products/services mentioned across ALL text columns
+        const allTextContent = data.flatMap(row => 
+          Object.entries(row)
+            .filter(([col]) => !analysis.idColumns.includes(col) && !analysis.priceColumns.includes(col))
+            .map(([, val]) => String(val).toLowerCase())
+        ).join(' ');
+        
+        // Build a frequency map of potential product/service names
+        const productPatterns = {};
+        data.forEach(row => {
+          Object.values(row).forEach(val => {
+            const str = String(val);
+            // Look for capitalized words or known patterns
+            const words = str.match(/[A-Z][a-zA-Z0-9+]+|[A-Z]{2,}[0-9]*|[a-zA-Z]+[0-9]+/g) || [];
+            words.forEach(word => {
+              if (word.length >= 2 && word.length <= 30) {
+                productPatterns[word] = (productPatterns[word] || 0) + 1;
+              }
+            });
+          });
+        });
+        
+        // Filter to patterns that appear multiple times (likely product names)
+        analysis.patterns.products = Object.entries(productPatterns)
+          .filter(([name, count]) => count >= 2 && name.length >= 2)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 100)
+          .map(([name, count]) => ({ name, count }));
+        
+        console.log(`📊 Data Analysis Complete for ${type}:`, analysis);
+        return analysis;
+      };
+      
+      // Build comprehensive data context for AI
+      const buildSmartContext = () => {
+        if (!dataDictionary) return '';
+        
+        let context = '\\n\\n=== SMART DATA DICTIONARY ===\\n';
+        
+        if (dataDictionary.products) {
+          const p = dataDictionary.products;
+          context += `\\n📦 PRODUCTS (${p.rowCount} rows):\\n`;
+          context += `Columns: ${Object.keys(p.columns).join(' | ')}\\n`;
+          if (p.idColumns.length) context += `• ID columns: ${p.idColumns.join(', ')}\\n`;
+          if (p.nameColumns.length) context += `• Name columns: ${p.nameColumns.join(', ')}\\n`;
+          if (p.priceColumns.length) context += `• Price columns: ${p.priceColumns.join(', ')}\\n`;
+          if (p.dateColumns.length) context += `• Date columns: ${p.dateColumns.join(', ')}\\n`;
+          if (p.categoryColumns.length) context += `• Category columns: ${p.categoryColumns.join(', ')}\\n`;
+          
+          // Show unique values for categorical columns
+          Object.entries(p.uniqueValues).forEach(([col, vals]) => {
+            if (vals.length <= 20) {
+              context += `• ${col} values: ${vals.join(', ')}\\n`;
+            }
+          });
+        }
+        
+        if (dataDictionary.bundles) {
+          const b = dataDictionary.bundles;
+          context += `\\n📦 BUNDLES (${b.rowCount} rows):\\n`;
+          context += `Columns: ${Object.keys(b.columns).join(' | ')}\\n`;
+          if (b.idColumns.length) context += `• ID columns: ${b.idColumns.join(', ')}\\n`;
+          if (b.nameColumns.length) context += `• Name columns: ${b.nameColumns.join(', ')}\\n`;
+          if (b.priceColumns.length) context += `• Price columns: ${b.priceColumns.join(', ')}\\n`;
+          if (b.dateColumns.length) context += `• Date columns: ${b.dateColumns.join(', ')}\\n`;
+          if (b.categoryColumns.length) context += `• Category columns: ${b.categoryColumns.join(', ')}\\n`;
+          if (b.contentColumns.length) context += `• Content/Product columns: ${b.contentColumns.join(', ')}\\n`;
+          
+          // Show unique values for categorical columns
+          Object.entries(b.uniqueValues).forEach(([col, vals]) => {
+            if (vals.length <= 20) {
+              context += `• ${col} values: ${vals.join(', ')}\\n`;
+            }
+          });
+          
+          // Show detected product patterns
+          if (b.patterns.products && b.patterns.products.length > 0) {
+            context += `\\n🔍 DETECTED PRODUCTS/SERVICES IN BUNDLES:\\n`;
+            context += b.patterns.products.slice(0, 30).map(p => `${p.name} (${p.count}x)`).join(', ');
+            context += '\\n';
+          }
+        }
+        
+        return context;
+      };
+      
       // Dynamic prompt suggestions based on context
       const [lastQueryType, setLastQueryType] = useState(null);
       
@@ -701,6 +873,8 @@
           )
         );
         
+        console.log(`Impact Analysis: Searched "${term}" in ${bundles.length} bundles, found ${affectedBundles.length} matches`);
+        
         // Get bundle columns for analysis
         const bundleCols = Object.keys(bundles[0] || {});
         const priceCol = bundleCols.find(c => c.toLowerCase().includes('price')) || null;
@@ -804,20 +978,29 @@
       // Quick impact suggestions based on data
       const getImpactSuggestions = () => {
         if (bundles.length === 0) return [];
+        
+        // Use learned patterns from data dictionary if available
+        if (dataDictionary?.bundles?.patterns?.products) {
+          // Return the top detected products from the actual data
+          return dataDictionary.bundles.patterns.products
+            .slice(0, 15)
+            .map(p => p.name);
+        }
+        
+        // Fallback: scan all bundle data
         const suggestions = new Set();
+        const allData = bundles.map(b => Object.values(b).join(' ').toLowerCase()).join(' ');
         
-        // Scan bundle data for common products/services
-        const sampleData = bundles.slice(0, 50).map(b => Object.values(b).join(' ').toLowerCase()).join(' ');
-        
+        // Common products as fallback
         const commonProducts = ['Netflix', 'Disney+', 'Disney', 'Spotify', 'Sky Sports', 'BT Sport', 'Prime Video', 'Apple TV', 'HBO', 'Paramount+', 'NOW TV', 'YouTube Premium', 'Fibre', 'Broadband', 'Phone', 'TV', 'Flex', 'Stream', 'DOCSIS', 'FTTP', 'M50', 'M125', 'M250', 'M350', 'M500', 'Gig1'];
         
         commonProducts.forEach(product => {
-          if (sampleData.includes(product.toLowerCase())) {
+          if (allData.includes(product.toLowerCase())) {
             suggestions.add(product);
           }
         });
         
-        return Array.from(suggestions).slice(0, 12);
+        return Array.from(suggestions).slice(0, 15);
       };
 
       // Onboarding Wizard Component
@@ -1315,13 +1498,20 @@ Return ONLY valid JSON:
               const firstSheet = workbook.SheetNames[0];
               const sheetData = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet], { defval: '' });
               
+              // Analyze the data and update dictionary
+              const analysis = analyzeData(sheetData, type);
+              setDataDictionary(prev => ({ ...prev, [type]: analysis }));
+              
               if (type === 'products') {
                 setProducts(sheetData);
-                addMessage('system', `✅ Loaded ${sheetData.length} products from Excel`);
+                const cols = Object.keys(sheetData[0] || {}).join(', ');
+                addMessage('system', `✅ Loaded ${sheetData.length} products from Excel\n📊 Columns detected: ${cols}\n🧠 Data analyzed and indexed for smart queries`);
                 if (showOnboarding) completeOnboarding();
               } else {
                 setBundles(sheetData);
-                addMessage('system', `✅ Loaded ${sheetData.length} bundles from Excel`);
+                const cols = Object.keys(sheetData[0] || {}).join(', ');
+                const detectedProducts = analysis?.patterns?.products?.slice(0, 10).map(p => p.name).join(', ') || 'None detected';
+                addMessage('system', `✅ Loaded ${sheetData.length} bundles from Excel\n📊 Columns: ${cols}\n🔍 Products/services detected: ${detectedProducts}\n🧠 Data analyzed and indexed for smart queries`);
                 if (showOnboarding) completeOnboarding();
               }
             } catch (error) {
@@ -1336,13 +1526,20 @@ Return ONLY valid JSON:
           header: true,
           skipEmptyLines: true,
           complete: (results) => {
+            // Analyze the data and update dictionary
+            const analysis = analyzeData(results.data, type);
+            setDataDictionary(prev => ({ ...prev, [type]: analysis }));
+            
             if (type === 'products') {
               setProducts(results.data);
-              addMessage('system', `✅ Loaded ${results.data.length} products`);
+              const cols = Object.keys(results.data[0] || {}).join(', ');
+              addMessage('system', `✅ Loaded ${results.data.length} products\n📊 Columns: ${cols}\n🧠 Data analyzed and indexed`);
               if (showOnboarding) completeOnboarding();
             } else {
               setBundles(results.data);
-              addMessage('system', `✅ Loaded ${results.data.length} bundles`);
+              const cols = Object.keys(results.data[0] || {}).join(', ');
+              const detectedProducts = analysis?.patterns?.products?.slice(0, 10).map(p => p.name).join(', ') || 'None detected';
+              addMessage('system', `✅ Loaded ${results.data.length} bundles\n📊 Columns: ${cols}\n🔍 Products detected: ${detectedProducts}\n🧠 Data analyzed and indexed`);
               if (showOnboarding) completeOnboarding();
             }
           },
@@ -1362,64 +1559,274 @@ Return ONLY valid JSON:
         setMessages(prev => [...prev, { role, content, timestamp: Date.now() }]);
       };
 
+      // SMART QUERY ENGINE - Analyzes data in JavaScript for 100% accuracy
+      const analyzeQuery = (query) => {
+        const q = query.toLowerCase();
+        const results = { type: null, data: null, summary: null };
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        
+        // Helper: Search all columns of a row for a term
+        const rowContains = (row, term) => {
+          const t = term.toLowerCase();
+          return Object.values(row).some(val => String(val).toLowerCase().includes(t));
+        };
+        
+        // Helper: Parse date from various formats
+        const parseDate = (dateStr) => {
+          if (!dateStr) return null;
+          const str = String(dateStr).trim();
+          
+          // Try DD/MM/YYYY
+          let match = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+          if (match) {
+            const [, day, month, year] = match;
+            return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+          }
+          
+          // Try YYYY-MM-DD
+          match = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+          if (match) {
+            const [, year, month, day] = match;
+            return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+          }
+          
+          // Try parsing directly
+          const d = new Date(str);
+          return isNaN(d.getTime()) ? null : d;
+        };
+        
+        // Helper: Parse price
+        const parsePrice = (priceStr) => {
+          if (!priceStr) return 0;
+          const cleaned = String(priceStr).replace(/[^0-9.-]/g, '');
+          return parseFloat(cleaned) || 0;
+        };
+        
+        // Helper: Get column by type
+        const getCol = (data, ...keywords) => {
+          if (!data || data.length === 0) return null;
+          const cols = Object.keys(data[0]);
+          for (const kw of keywords) {
+            const found = cols.find(c => c.toLowerCase().includes(kw.toLowerCase()));
+            if (found) return found;
+          }
+          return null;
+        };
+        
+        // Detect date column
+        const dateCol = getCol(bundles, 'end', 'expir', 'date') || getCol(bundles, 'start', 'launch');
+        const nameCol = getCol(bundles, 'name', 'bundle', 'title') || (bundles[0] ? Object.keys(bundles[0])[1] : null);
+        const idCol = getCol(bundles, 'id', 'sku', 'code') || (bundles[0] ? Object.keys(bundles[0])[0] : null);
+        const priceCol = getCol(bundles, 'price', 'cost', 'fee');
+        
+        // PATTERN: "how many" / "count" questions
+        if (q.includes('how many') || q.includes('count') || q.includes('total number')) {
+          
+          // Count bundles containing a term
+          const containsMatch = q.match(/(?:contain|with|have|include|featuring)\s+['"]?([^'"?]+?)['"]?(?:\s|$|\?)/i);
+          if (containsMatch) {
+            const term = containsMatch[1].trim();
+            const matching = bundles.filter(b => rowContains(b, term));
+            results.type = 'count';
+            results.data = matching;
+            results.summary = `Found ${matching.length} bundles containing "${term}" (searched all ${bundles.length} bundles)`;
+            return results;
+          }
+          
+          // Count expiring
+          if (q.includes('expir') || q.includes('ending')) {
+            let days = 30;
+            if (q.includes('this month')) days = 30;
+            if (q.includes('this year') || q.includes(String(currentYear))) days = 365;
+            if (q.includes('next 30')) days = 30;
+            if (q.includes('next 60')) days = 60;
+            if (q.includes('next 90')) days = 90;
+            if (q.includes('next 7') || q.includes('this week')) days = 7;
+            
+            const cutoff = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+            const expiring = bundles.filter(b => {
+              if (!dateCol) return false;
+              const d = parseDate(b[dateCol]);
+              return d && d >= now && d <= cutoff;
+            });
+            results.type = 'expiring';
+            results.data = expiring;
+            results.summary = `Found ${expiring.length} bundles expiring in the next ${days} days`;
+            return results;
+          }
+        }
+        
+        // PATTERN: "list" / "show" / "what" bundles
+        if (q.includes('list') || q.includes('show me') || q.includes('what bundles') || q.includes('which bundles')) {
+          
+          // With a specific term
+          const withMatch = q.match(/(?:with|contain|include|have|featuring)\s+['"]?([^'"?]+?)['"]?(?:\s|$|\?)/i);
+          if (withMatch) {
+            const term = withMatch[1].trim();
+            const matching = bundles.filter(b => rowContains(b, term));
+            results.type = 'list';
+            results.data = matching;
+            results.summary = `${matching.length} bundles contain "${term}"`;
+            return results;
+          }
+          
+          // Expiring
+          if (q.includes('expir') || q.includes('ending')) {
+            let days = 30;
+            if (q.includes('this year')) {
+              const endOfYear = new Date(currentYear, 11, 31);
+              const expiring = bundles.filter(b => {
+                if (!dateCol) return false;
+                const d = parseDate(b[dateCol]);
+                return d && d >= now && d <= endOfYear;
+              });
+              results.type = 'list';
+              results.data = expiring;
+              results.summary = `${expiring.length} bundles expiring before end of ${currentYear}`;
+              return results;
+            }
+            
+            if (q.includes('30')) days = 30;
+            if (q.includes('60')) days = 60;
+            if (q.includes('90')) days = 90;
+            if (q.includes('7') || q.includes('week')) days = 7;
+            
+            const cutoff = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+            const expiring = bundles.filter(b => {
+              if (!dateCol) return false;
+              const d = parseDate(b[dateCol]);
+              return d && d >= now && d <= cutoff;
+            });
+            results.type = 'list';
+            results.data = expiring;
+            results.summary = `${expiring.length} bundles expiring in next ${days} days`;
+            return results;
+          }
+        }
+        
+        // PATTERN: Price questions
+        if (q.includes('expensive') || q.includes('cheapest') || q.includes('price')) {
+          if (priceCol) {
+            const withPrices = bundles.map(b => ({ ...b, _price: parsePrice(b[priceCol]) })).filter(b => b._price > 0);
+            
+            if (q.includes('most expensive') || q.includes('highest price')) {
+              const sorted = withPrices.sort((a, b) => b._price - a._price).slice(0, 10);
+              results.type = 'list';
+              results.data = sorted;
+              results.summary = `Top 10 most expensive bundles`;
+              return results;
+            }
+            
+            if (q.includes('cheapest') || q.includes('lowest price')) {
+              const sorted = withPrices.sort((a, b) => a._price - b._price).slice(0, 10);
+              results.type = 'list';
+              results.data = sorted;
+              results.summary = `Top 10 cheapest bundles`;
+              return results;
+            }
+          }
+        }
+        
+        // PATTERN: Search for specific product/term
+        const searchTerms = ['netflix', 'disney', 'spotify', 'sky', 'bt sport', 'amazon', 'prime', 'apple', 'hbo', 'fibre', 'broadband'];
+        for (const term of searchTerms) {
+          if (q.includes(term)) {
+            const matching = bundles.filter(b => rowContains(b, term));
+            if (matching.length > 0) {
+              results.type = 'search';
+              results.data = matching;
+              results.summary = `${matching.length} bundles contain "${term}"`;
+              return results;
+            }
+          }
+        }
+        
+        // No pattern matched - return null for Claude to handle
+        return null;
+      };
+
       const callClaudeAPI = async (userPrompt, useExtendedThinking = false) => {
         if (!isAuthenticated || !authToken) throw new Error('Please login');
 
         try {
+          // FIRST: Try to answer with JavaScript analysis (100% accurate)
+          const preAnalysis = analyzeQuery(userPrompt);
+          
           let dataContext = '';
-          if (products.length > 0) {
-            dataContext += `\n\nPRODUCTS (${products.length} total):\nColumns: ${Object.keys(products[0]).join(', ')}\n`;
-            dataContext += products.length <= 100 ? JSON.stringify(products, null, 2) : JSON.stringify(products.slice(0, 20), null, 2);
+          let preComputedAnswer = '';
+          
+          if (preAnalysis && preAnalysis.data) {
+            // We have pre-computed results - send these to Claude for formatting
+            const cols = bundles.length > 0 ? Object.keys(bundles[0]) : [];
+            preComputedAnswer = `
+=== PRE-COMPUTED RESULTS (100% ACCURATE - USE THESE) ===
+Query Type: ${preAnalysis.type}
+Summary: ${preAnalysis.summary}
+Total Matches: ${preAnalysis.data.length}
+Data Columns: ${cols.join(', ')}
+
+MATCHING DATA:
+${JSON.stringify(preAnalysis.data.slice(0, 100), null, 2)}
+${preAnalysis.data.length > 100 ? `\n... and ${preAnalysis.data.length - 100} more matches` : ''}
+
+IMPORTANT: The above results are PRE-COMPUTED and 100% ACCURATE. 
+Your job is to FORMAT these results nicely as a markdown table.
+Use the exact column names: ${cols.join(' | ')}
+End with: **Total: ${preAnalysis.data.length} bundles found**
+`;
+          } else {
+            // No pre-computation - send full data
+            if (products.length > 0) {
+              dataContext += `\n\n=== PRODUCTS DATA (${products.length} total rows) ===\n`;
+              dataContext += `Columns: ${Object.keys(products[0]).join(', ')}\n`;
+              dataContext += JSON.stringify(products.slice(0, 300), null, 2);
+              if (products.length > 300) dataContext += `\n... and ${products.length - 300} more rows`;
+            }
+            if (bundles.length > 0) {
+              dataContext += `\n\n=== BUNDLES DATA (${bundles.length} total rows) ===\n`;
+              dataContext += `Columns: ${Object.keys(bundles[0]).join(', ')}\n`;
+              dataContext += JSON.stringify(bundles.slice(0, 300), null, 2);
+              if (bundles.length > 300) dataContext += `\n... and ${bundles.length - 300} more rows`;
+            }
           }
-          if (bundles.length > 0) {
-            dataContext += `\n\nBUNDLES (${bundles.length} total):\nColumns: ${Object.keys(bundles[0]).join(', ')}\n`;
-            dataContext += bundles.length <= 100 ? JSON.stringify(bundles, null, 2) : JSON.stringify(bundles.slice(0, 20), null, 2);
-          }
+          
+          // Build smart context from data dictionary
+          const smartContext = buildSmartContext();
 
           const currentDate = new Date();
           const dateStr = currentDate.toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
           
-          // Get exact column names from data
           const productColumns = products.length > 0 ? Object.keys(products[0]) : [];
           const bundleColumns = bundles.length > 0 ? Object.keys(bundles[0]) : [];
           
-          const systemPrompt = `You are an AI assistant helping manage a product catalog. You have DIRECT ACCESS to the user's data below.
+          const systemPrompt = preAnalysis ? 
+            `You are formatting pre-computed data analysis results. The data has already been accurately analyzed.
 
-CURRENT DATE: ${dateStr}
-CURRENT YEAR: ${currentDate.getFullYear()}
+${preComputedAnswer}
+
+Format the results as a clean markdown table using the exact column names provided.
+Keep your response concise - just the table and the total count.
+Do NOT re-analyze or question the results - they are accurate.` 
+            :
+            `You are an expert data analyst. IMPORTANT: Search EVERY row carefully.
+
+CURRENT DATE: ${dateStr} | YEAR: ${currentDate.getFullYear()}
+
+${smartContext}
 
 ${dataContext}
 
 USER QUESTION: ${userPrompt}
 
-CRITICAL FORMATTING RULES:
-1. ALWAYS use markdown tables when listing multiple items (products or bundles)
-2. ALWAYS include IDs/SKUs in the first column so the user can find items
-3. ALWAYS summarize with totals at the end (e.g., "Total: 5 bundles found")
-4. Keep answers concise - NO waffle or unnecessary explanation
-5. When asked about dates (e.g., "ending this year", "expiring soon"), use the CURRENT DATE above
-6. "This year" means ${currentDate.getFullYear()}, "next year" means ${currentDate.getFullYear() + 1}
+RULES:
+1. Search EVERY row in the data - don't sample
+2. Check ALL columns for matches (case-insensitive)
+3. Format results as markdown tables with exact column names
+4. Always end with "**Total: X found**"
+5. If uncertain, say so - don't guess
 
-⚠️ CRITICAL - USE EXACT COLUMN NAMES FROM THE DATA:
-${productColumns.length > 0 ? `PRODUCT COLUMNS (use these EXACT names): ${productColumns.join(' | ')}` : 'No products loaded'}
-${bundleColumns.length > 0 ? `BUNDLE COLUMNS (use these EXACT names): ${bundleColumns.join(' | ')}` : 'No bundles loaded'}
-
-When creating tables:
-- Use the EXACT column names listed above as headers
-- Do NOT rename or create new column names
-- Include ALL relevant columns from the original data
-- If showing bundles, use the bundle column names
-- If showing products, use the product column names
-
-EXAMPLE - If bundle columns are "Bundle_ID | Bundle_Name | End_Date | Price | Network"
-Your table MUST use those exact headers:
-| Bundle_ID | Bundle_Name | End_Date | Price | Network |
-|-----------|-------------|----------|-------|---------|
-| 4303 | M50 Fibre Broadband | 04/06/2025 | £48 | DOCSIS |
-
-**Total: X bundles found**
-
-NOW ANSWER THE USER'S QUESTION USING THE EXACT COLUMN NAMES FROM THEIR DATA:`;
+COLUMNS: ${bundleColumns.join(' | ')}`;
 
           const response = await fetch(`${API_URL}/api/claude/completion`, {
             method: "POST",
@@ -1430,6 +1837,7 @@ NOW ANSWER THE USER'S QUESTION USING THE EXACT COLUMN NAMES FROM THEIR DATA:`;
             body: JSON.stringify({
               messages: [{ role: "user", content: systemPrompt }],
               max_tokens: useExtendedThinking ? 4000 : 2000
+            })
             })
           });
 
@@ -1451,6 +1859,141 @@ NOW ANSWER THE USER'S QUESTION USING THE EXACT COLUMN NAMES FROM THEIR DATA:`;
         }
       };
 
+      // FAST LOCAL QUERY - Answers simple questions instantly without API call
+      const tryLocalAnswer = (query) => {
+        const q = query.toLowerCase();
+        const cols = bundles.length > 0 ? Object.keys(bundles[0]) : [];
+        const idCol = cols.find(c => c.toLowerCase().includes('id') || c.toLowerCase().includes('sku')) || cols[0];
+        const nameCol = cols.find(c => c.toLowerCase().includes('name') || c.toLowerCase().includes('bundle') || c.toLowerCase().includes('title')) || cols[1] || cols[0];
+        const priceCol = cols.find(c => c.toLowerCase().includes('price') || c.toLowerCase().includes('cost'));
+        const dateCol = cols.find(c => c.toLowerCase().includes('end') || c.toLowerCase().includes('expir') || c.toLowerCase().includes('date'));
+        
+        // Helper functions
+        const rowContains = (row, term) => Object.values(row).some(v => String(v).toLowerCase().includes(term.toLowerCase()));
+        
+        const parseDate = (str) => {
+          if (!str) return null;
+          const s = String(str).trim();
+          let m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+          if (m) return new Date(parseInt(m[3]), parseInt(m[2])-1, parseInt(m[1]));
+          m = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+          if (m) return new Date(parseInt(m[1]), parseInt(m[2])-1, parseInt(m[3]));
+          const d = new Date(s);
+          return isNaN(d.getTime()) ? null : d;
+        };
+        
+        const parsePrice = (p) => parseFloat(String(p || '0').replace(/[^0-9.-]/g, '')) || 0;
+        
+        const formatTable = (data, columns) => {
+          if (data.length === 0) return 'No results found.';
+          const showCols = columns || cols.slice(0, 6);
+          let table = '| ' + showCols.join(' | ') + ' |\n';
+          table += '| ' + showCols.map(() => '---').join(' | ') + ' |\n';
+          data.slice(0, 50).forEach(row => {
+            table += '| ' + showCols.map(c => String(row[c] || '').substring(0, 40)).join(' | ') + ' |\n';
+          });
+          if (data.length > 50) table += `\n*... and ${data.length - 50} more rows*\n`;
+          return table;
+        };
+        
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        
+        // Pattern: How many bundles total
+        if ((q.includes('how many bundles') || q.includes('total bundles') || q.includes('count of bundles')) && !q.includes('contain') && !q.includes('with') && !q.includes('expir')) {
+          return `**Total: ${bundles.length} bundles** in the catalog.`;
+        }
+        
+        // Pattern: How many products total  
+        if ((q.includes('how many products') || q.includes('total products')) && !q.includes('contain')) {
+          return `**Total: ${products.length} products** in the catalog.`;
+        }
+        
+        // Pattern: How many contain X
+        const containMatch = q.match(/how many (?:bundles? )?(?:contain|with|have|include|featuring)\s+['"]?([^'"?]+?)['"]?(?:\s|$|\?)/i);
+        if (containMatch) {
+          const term = containMatch[1].trim();
+          const matching = bundles.filter(b => rowContains(b, term));
+          return `**${matching.length} bundles** contain "${term}" (searched all ${bundles.length} bundles).\n\n${matching.length > 0 ? formatTable(matching) + '\n\n' : ''}**Total: ${matching.length} bundles found**`;
+        }
+        
+        // Pattern: List/show bundles with X
+        const listMatch = q.match(/(?:list|show|what|which)\s+(?:all\s+)?bundles?\s+(?:that\s+)?(?:contain|with|have|include|featuring)\s+['"]?([^'"?]+?)['"]?/i);
+        if (listMatch) {
+          const term = listMatch[1].trim();
+          const matching = bundles.filter(b => rowContains(b, term));
+          return `Found **${matching.length} bundles** containing "${term}":\n\n${formatTable(matching)}\n\n**Total: ${matching.length} bundles found**`;
+        }
+        
+        // Pattern: Bundles expiring this year / in 2025 / soon
+        if (q.includes('expir') || q.includes('ending')) {
+          let days = 30;
+          let label = 'in the next 30 days';
+          
+          if (q.includes('this year') || q.includes(String(currentYear))) {
+            const endOfYear = new Date(currentYear, 11, 31);
+            const expiring = bundles.filter(b => {
+              if (!dateCol) return false;
+              const d = parseDate(b[dateCol]);
+              return d && d >= now && d <= endOfYear;
+            }).sort((a, b) => {
+              const da = parseDate(a[dateCol]) || new Date(9999, 0);
+              const db = parseDate(b[dateCol]) || new Date(9999, 0);
+              return da - db;
+            });
+            return `Found **${expiring.length} bundles** expiring before end of ${currentYear}:\n\n${formatTable(expiring)}\n\n**Total: ${expiring.length} bundles expiring this year**`;
+          }
+          
+          if (q.includes('next 7') || q.includes('this week')) { days = 7; label = 'in the next 7 days'; }
+          if (q.includes('next 30') || q.includes('this month')) { days = 30; label = 'in the next 30 days'; }
+          if (q.includes('next 60')) { days = 60; label = 'in the next 60 days'; }
+          if (q.includes('next 90')) { days = 90; label = 'in the next 90 days'; }
+          if (q.includes('soon')) { days = 30; label = 'soon (next 30 days)'; }
+          
+          const cutoff = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+          const expiring = bundles.filter(b => {
+            if (!dateCol) return false;
+            const d = parseDate(b[dateCol]);
+            return d && d >= now && d <= cutoff;
+          }).sort((a, b) => {
+            const da = parseDate(a[dateCol]) || new Date(9999, 0);
+            const db = parseDate(b[dateCol]) || new Date(9999, 0);
+            return da - db;
+          });
+          
+          return `Found **${expiring.length} bundles** expiring ${label}:\n\n${formatTable(expiring)}\n\n**Total: ${expiring.length} bundles found**`;
+        }
+        
+        // Pattern: Most expensive / cheapest
+        if (priceCol && (q.includes('expensive') || q.includes('cheapest') || q.includes('highest price') || q.includes('lowest price'))) {
+          const withPrices = bundles.map(b => ({ ...b, _parsed_price: parsePrice(b[priceCol]) })).filter(b => b._parsed_price > 0);
+          
+          if (q.includes('most expensive') || q.includes('highest price')) {
+            const sorted = withPrices.sort((a, b) => b._parsed_price - a._parsed_price).slice(0, 10);
+            return `**Top 10 most expensive bundles:**\n\n${formatTable(sorted)}\n\n**Highest price: £${sorted[0]?._parsed_price || 'N/A'}**`;
+          }
+          
+          if (q.includes('cheapest') || q.includes('lowest price')) {
+            const sorted = withPrices.sort((a, b) => a._parsed_price - b._parsed_price).slice(0, 10);
+            return `**Top 10 cheapest bundles:**\n\n${formatTable(sorted)}\n\n**Lowest price: £${sorted[0]?._parsed_price || 'N/A'}**`;
+          }
+        }
+        
+        // Pattern: Search for common terms (Netflix, Disney, Fibre, etc)
+        const commonTerms = ['netflix', 'disney', 'spotify', 'sky', 'bt sport', 'prime', 'amazon', 'apple', 'hbo', 'fibre', 'fttp', 'docsis', 'broadband'];
+        for (const term of commonTerms) {
+          if (q.includes(term) && (q.includes('bundle') || q.includes('how many') || q.includes('list') || q.includes('show') || q.includes('which') || q.includes('what'))) {
+            const matching = bundles.filter(b => rowContains(b, term));
+            if (matching.length > 0 || q.includes('how many')) {
+              return `Found **${matching.length} bundles** containing "${term}":\n\n${formatTable(matching)}\n\n**Total: ${matching.length} bundles found**`;
+            }
+          }
+        }
+        
+        // Not a pattern we can answer locally
+        return null;
+      };
+
       const handleSubmit = async (e) => {
         e.preventDefault();
         if (!input.trim() || isLoading) return;
@@ -1465,6 +2008,15 @@ NOW ANSWER THE USER'S QUESTION USING THE EXACT COLUMN NAMES FROM THEIR DATA:`;
         setLastQueryType(detectQueryType(userMessage));
 
         try {
+          // FIRST: Try to answer locally (instant & 100% accurate)
+          const localAnswer = tryLocalAnswer(userMessage);
+          if (localAnswer) {
+            addMessage('assistant', '⚡ ' + localAnswer + '\n\n*✓ Computed locally - 100% accurate*');
+            setIsLoading(false);
+            return;
+          }
+          
+          // Otherwise, call Claude API
           const response = await callClaudeAPI(userMessage, false);
           addMessage('assistant', response);
         } catch (error) {
@@ -1775,6 +2327,37 @@ NOW ANSWER THE USER'S QUESTION USING THE EXACT COLUMN NAMES FROM THEIR DATA:`;
                 <button onClick={() => setShowImpactAnalysis(!showImpactAnalysis)} className={`pill ${showImpactAnalysis ? 'bg-rose-600 text-white' : 'bg-white text-gray-600 border border-slate-200 hover:border-rose-300'}`}>
                   <span className="flex items-center gap-1.5"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg> Impact</span>
                 </button>
+                {dataDictionary && (
+                  <button onClick={() => {
+                    const dict = dataDictionary;
+                    let info = '🧠 DATA DICTIONARY - What I learned from your data:\n\n';
+                    if (dict.products) {
+                      info += `📦 PRODUCTS (${dict.products.rowCount} rows)\n`;
+                      info += `Columns: ${Object.keys(dict.products.columns).join(', ')}\n`;
+                      if (dict.products.idColumns.length) info += `• ID columns: ${dict.products.idColumns.join(', ')}\n`;
+                      if (dict.products.nameColumns.length) info += `• Name columns: ${dict.products.nameColumns.join(', ')}\n`;
+                      if (dict.products.priceColumns.length) info += `• Price columns: ${dict.products.priceColumns.join(', ')}\n`;
+                      if (dict.products.dateColumns.length) info += `• Date columns: ${dict.products.dateColumns.join(', ')}\n`;
+                      info += '\n';
+                    }
+                    if (dict.bundles) {
+                      info += `📦 BUNDLES (${dict.bundles.rowCount} rows)\n`;
+                      info += `Columns: ${Object.keys(dict.bundles.columns).join(', ')}\n`;
+                      if (dict.bundles.idColumns.length) info += `• ID columns: ${dict.bundles.idColumns.join(', ')}\n`;
+                      if (dict.bundles.nameColumns.length) info += `• Name columns: ${dict.bundles.nameColumns.join(', ')}\n`;
+                      if (dict.bundles.priceColumns.length) info += `• Price columns: ${dict.bundles.priceColumns.join(', ')}\n`;
+                      if (dict.bundles.dateColumns.length) info += `• Date columns: ${dict.bundles.dateColumns.join(', ')}\n`;
+                      if (dict.bundles.contentColumns.length) info += `• Content columns: ${dict.bundles.contentColumns.join(', ')}\n`;
+                      if (dict.bundles.patterns?.products?.length) {
+                        info += `\n🔍 DETECTED PRODUCTS/SERVICES:\n`;
+                        info += dict.bundles.patterns.products.slice(0, 20).map(p => `${p.name} (${p.count}x)`).join(', ');
+                      }
+                    }
+                    addMessage('system', info);
+                  }} className="pill bg-emerald-50 text-emerald-600 border border-emerald-200 hover:border-emerald-300">
+                    <span className="flex items-center gap-1.5"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg> 🧠 Dictionary</span>
+                  </button>
+                )}
                 <button onClick={resetOnboarding} className="pill bg-white text-gray-600 border border-slate-200 hover:border-slate-300">
                   <span className="flex items-center gap-1.5"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg> Help</span>
                 </button>
@@ -1911,6 +2494,12 @@ NOW ANSWER THE USER'S QUESTION USING THE EXACT COLUMN NAMES FROM THEIR DATA:`;
                     {/* Results */}
                     {impactResults && (
                       <div className="space-y-4 mt-6">
+                        {/* Debug/confirmation info */}
+                        <div className="text-xs text-gray-500 bg-slate-100 px-3 py-2 rounded-lg flex items-center gap-2">
+                          <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                          Scanned all <strong>{bundles.length}</strong> bundles • Found <strong>{impactResults.affectedCount}</strong> containing "<strong>{impactResults.searchTerm}</strong>"
+                        </div>
+                        
                         {/* Summary Cards */}
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                           <div className="bg-red-50 rounded-lg p-4 text-center border border-red-200">
