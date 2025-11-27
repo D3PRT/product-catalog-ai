@@ -112,6 +112,29 @@
       // SMART DATA DICTIONARY - learns your data structure
       const [dataDictionary, setDataDictionary] = useState(null);
       
+      // ===== UTILITY FUNCTIONS (consolidated) =====
+      const utils = {
+        parsePrice: (val) => {
+          if (!val && val !== 0) return 0;
+          return parseFloat(String(val).replace(/[^0-9.-]/g, '')) || 0;
+        },
+        parseDate: (str) => {
+          if (!str) return null;
+          const s = String(str).trim();
+          // DD/MM/YYYY
+          let m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+          if (m) return new Date(parseInt(m[3]), parseInt(m[2])-1, parseInt(m[1]));
+          // YYYY-MM-DD
+          m = s.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})$/);
+          if (m) return new Date(parseInt(m[1]), parseInt(m[2])-1, parseInt(m[3]));
+          const d = new Date(s);
+          return isNaN(d.getTime()) ? null : d;
+        },
+        rowContains: (row, term) => Object.values(row).some(v => String(v).toLowerCase().includes(term.toLowerCase())),
+        extractCodes: (str) => str ? String(str).match(/[PDAS]\d+/g) || [] : [],
+        formatCurrency: (val) => `£${utils.parsePrice(val).toFixed(2)}`
+      };
+
       // Analyze data and build a comprehensive dictionary
       const analyzeData = (data, type) => {
         if (!data || data.length === 0) return null;
@@ -284,296 +307,33 @@
       // Dynamic prompt suggestions based on context
       const [lastQueryType, setLastQueryType] = useState(null);
       
-      const getSmartPrompts = () => {
-        const prompts = {
-          gettingStarted: [
-            "What file formats can I upload?",
-            "Show me an example structure",
-            "What can you help me with?",
-            "How do I get started?"
-          ],
-          
-          // ROLE-SPECIFIC PROMPTS
-          productOwner: [
-            "What bundles are launching this quarter?",
-            "Which bundles need renewal decisions?",
-            "Show bundles expiring in next 30 days",
-            "What's our most expensive bundle?",
-            "What's our cheapest bundle?",
-            "Compare our Fibre offerings",
-            "Which bundles have the best value?",
-            "Show bundle pricing tier breakdown",
-            "What bundles compete with each other?",
-            "Which products are in most bundles?",
-            "Suggest bundle improvements",
-            "What gaps exist in our bundle lineup?"
-          ],
-          
-          businessAnalyst: [
-            "Give me a full data summary",
-            "Show all bundle configurations",
-            "Compare all network types (DOCSIS vs FTTP)",
-            "Break down bundles by category",
-            "What's the price distribution?",
-            "Find any data inconsistencies",
-            "Which bundles have incomplete data?",
-            "Show bundle to product mapping",
-            "List all unique product combinations",
-            "What patterns exist in pricing?",
-            "Identify duplicate or similar bundles",
-            "Create a bundle comparison matrix",
-            "Show pricing anomalies",
-            "What's the average price per category?"
-          ],
-          
-          developer: [
-            "Show me the data structure",
-            "What fields are available?",
-            "List all unique values for each column",
-            "Find bundles with missing IDs",
-            "Check for data type issues",
-            "Show bundles with special characters",
-            "Find formatting inconsistencies",
-            "What's the schema of this data?",
-            "Show sample bundle configuration",
-            "List all bundle IDs",
-            "Show all product SKUs",
-            "Find null or empty values",
-            "Check date format consistency",
-            "Validate ID patterns"
-          ],
-          
-          dailyStandUp: [
-            "What's changed recently?",
-            "Show bundles added this week",
-            "What bundles expire today?",
-            "What expires this week?",
-            "Quick summary of all active bundles",
-            "Any pricing changes needed?",
-            "What needs immediate attention?",
-            "Show bundles by end date (soonest first)",
-            "Any data quality issues to fix?",
-            "What's our current bundle count?",
-            "Show today's bundle status"
-          ],
-          
-          // SPECIFIC LOOKUP QUERIES
-          bundleLookup: [
-            "Find bundle by ID...",
-            "Show me bundle [ID] details",
-            "What products are in bundle [ID]?",
-            "When does bundle [ID] expire?",
-            "What's the price of bundle [ID]?",
-            "Compare bundle [ID] with similar bundles",
-            "Show all M50 bundles",
-            "Show all M125 bundles",
-            "Show all M250 bundles",
-            "Show all M350 bundles",
-            "Show all M500 bundles",
-            "Show all Gig1 bundles",
-            "Find all Flex bundles",
-            "Find all Solus bundles"
-          ],
-          
-          productLookup: [
-            "Which bundles contain Netflix?",
-            "Which bundles contain Disney+?",
-            "Which bundles contain Sky Sports?",
-            "Which bundles contain BT Sport?",
-            "Which bundles have streaming included?",
-            "Find bundles with broadband only",
-            "Find bundles with TV included",
-            "Find bundles with phone included",
-            "What add-ons are available?"
-          ],
-          
-          configurationQueries: [
-            "How is bundle [ID] configured?",
-            "What's included in the Family pack?",
-            "Show all BB + Stream configurations",
-            "Show all BB Solus configurations",
-            "What's the difference between Flex and non-Flex?",
-            "Compare Standard vs Premium tiers",
-            "Show network configuration for bundle [ID]",
-            "What speed tiers do we offer?",
-            "Show all DOCSIS bundles",
-            "Show all FTTP bundles",
-            "Compare DOCSIS vs FTTP offerings"
-          ],
-          
-          pricingQueries: [
-            "Show pricing for all M500 bundles",
-            "Compare intro vs standard pricing",
-            "Which bundles have promotional pricing?",
-            "Show £0 intro price bundles",
-            "Which bundles are under £50?",
-            "Which bundles are over £70?",
-            "Price breakdown by speed tier",
-            "Show bundles with best intro deals",
-            "Compare pricing across categories"
-          ],
+      const getSmartPrompts = () => ({
+        gettingStarted: ["What file formats can I upload?", "Show me an example structure", "What can you help me with?", "How do I get started?"],
+        productOwner: ["What bundles are launching this quarter?", "Which bundles need renewal?", "Show bundles expiring in 30 days", "What's our most/cheapest expensive bundle?", "Compare our Fibre offerings", "Which products are in most bundles?", "What gaps exist in our lineup?"],
+        businessAnalyst: ["Give me a full data summary", "Compare all network types (DOCSIS vs FTTP)", "Break down bundles by category", "What's the price distribution?", "Find data inconsistencies", "Show bundle to product mapping", "Identify duplicate bundles", "Show pricing anomalies"],
+        developer: ["Show me the data structure", "What fields are available?", "List unique values per column", "Find bundles with missing IDs", "Check for data type issues", "Find formatting inconsistencies", "Validate ID patterns"],
+        dailyStandUp: ["What's changed recently?", "Show bundles added this week", "What expires today/this week?", "Quick summary of active bundles", "What needs immediate attention?", "Show bundles by end date"],
+        bundleLookup: ["Find bundle by ID...", "What products are in bundle [ID]?", "When does bundle [ID] expire?", "Show all M50/M125/M250/M350/M500/Gig1 bundles", "Find all Flex/Solus bundles"],
+        productLookup: ["Which bundles contain Netflix?", "Which bundles contain Disney+?", "Which bundles contain Sky Sports?", "Find bundles with broadband/TV/phone only", "What add-ons are available?"],
+        configurationQueries: ["How is bundle [ID] configured?", "Show all BB + Stream configs", "What's the difference between Flex and non-Flex?", "Show all DOCSIS/FTTP bundles", "Compare DOCSIS vs FTTP offerings"],
+        pricingQueries: ["Show pricing for all M500 bundles", "Compare intro vs standard pricing", "Which bundles have promotional pricing?", "Which bundles are under £50/over £70?"],
+        bundleAnalysis: ["Which bundles end this year?", "Which expire in 30/90 days?", "List bundles by price", "Which bundles are DOCSIS/FTTP?", "Compare Flex vs non-Flex bundles", "Find duplicate bundles"],
+        productAnalysis: ["Show products by category", "Which products aren't in any bundle?", "List products with missing data", "Show duplicate products"],
+        dataQuality: ["Check my data for errors", "Find rows with missing fields", "Show me any duplicates", "Validate all dates", "Find inconsistent pricing"],
+        reporting: ["Summary of all bundles/products", "Create a pricing report", "Show bundles expiring each month", "Break down by network type/category"]
+      });
 
-          bundleAnalysis: [
-            "Which bundles end this year?",
-            "Which bundles expire in the next 30 days?",
-            "Which bundles expire in the next 3 months?",
-            "Show all bundles with Netflix",
-            "Show all bundles with Disney+",
-            "Which bundles have the most products?",
-            "List bundles by price (high to low)",
-            "List bundles by price (low to high)",
-            "Show bundles cheaper than £50",
-            "Show bundles more expensive than £100",
-            "Which bundles are DOCSIS?",
-            "Which bundles are FTTP?",
-            "Show all BB Solus bundles",
-            "Show all BB + Stream bundles",
-            "Compare Flex vs non-Flex bundles",
-            "Which bundles were added this month?",
-            "Show bundles by category",
-            "Find duplicate bundles"
-          ],
-          productAnalysis: [
-            "Show all products by category",
-            "Which products aren't in any bundle?",
-            "List products with missing data",
-            "What's the average product price?",
-            "Show duplicate products",
-            "Which products are most expensive?",
-            "Which products are cheapest?",
-            "Show products added this month",
-            "Find products with no price",
-            "List all product categories"
-          ],
-          crossAnalysis: [
-            "Which products appear in the most bundles?",
-            "Suggest new bundle combinations",
-            "Find pricing inconsistencies",
-            "Compare bundle vs individual pricing",
-            "Which products should I add to bundles?",
-            "Find bundles with similar products",
-            "Show product overlap between bundles",
-            "Which bundles offer best value?"
-          ],
-          dataQuality: [
-            "Check my data for errors",
-            "Find rows with missing fields",
-            "Show me any duplicates",
-            "Validate all dates are correct",
-            "Find inconsistent pricing",
-            "Check for empty cells",
-            "Validate bundle IDs",
-            "Find formatting issues"
-          ],
-          reporting: [
-            "Give me a summary of all bundles",
-            "Give me a summary of all products",
-            "Create a pricing report",
-            "Show me bundles expiring each month",
-            "Break down bundles by network type",
-            "Break down bundles by category",
-            "Show monthly bundle count",
-            "Revenue analysis by bundle type"
-          ]
-        };
-        return prompts;
-      };
-
-      // Get dynamic follow-up prompts based on last query
       const getFollowUpPrompts = () => {
-        if (!lastQueryType) return [];
-        
-        const followUps = {
-          'bundles_ending': [
-            "Export these to Excel",
-            "Which of these have Netflix?",
-            "Sort by price",
-            "Show full details for each",
-            "Which have the best value?",
-            "Compare pricing across these",
-            "Who owns these bundles?",
-            "What's the renewal plan?"
-          ],
-          'bundles_netflix': [
-            "Which also have Disney+?",
-            "Sort by price",
-            "Which end this year?",
-            "Compare Netflix tiers",
-            "Which is cheapest with Netflix?",
-            "Show all streaming bundles",
-            "What other content is included?"
-          ],
-          'bundles_price': [
-            "Filter by network type",
-            "Show only BB + Stream",
-            "Which include streaming?",
-            "Compare top 5",
-            "Show intro vs standard pricing",
-            "Find promotional offers",
-            "Price per speed tier"
-          ],
-          'products_category': [
-            "Which category has most?",
-            "Show products not in bundles",
-            "Average price by category",
-            "Find gaps in categories",
-            "List all categories",
-            "Category breakdown chart"
-          ],
-          'data_quality': [
-            "Show the specific errors",
-            "How do I fix these?",
-            "Export issues list",
-            "Which are critical?",
-            "Re-validate after fixes",
-            "Check IDs specifically",
-            "Validate dates only"
-          ],
-          'bundle_lookup': [
-            "Show all products in this bundle",
-            "When does this expire?",
-            "What's the pricing?",
-            "Compare with similar bundles",
-            "Show configuration details",
-            "What network type is this?",
-            "Is there a Flex version?"
-          ],
-          'configuration': [
-            "Compare with other configs",
-            "What's the network type?",
-            "Show all similar bundles",
-            "What products are included?",
-            "DOCSIS or FTTP?",
-            "Show speed options",
-            "List all variants"
-          ],
-          'pricing': [
-            "Show intro vs standard",
-            "Which has best value?",
-            "Compare across speeds",
-            "Show promotional pricing",
-            "Price per product included",
-            "Export pricing table"
-          ],
-          'daily': [
-            "What needs action today?",
-            "Show expiring bundles",
-            "Any data issues?",
-            "Quick summary",
-            "What changed this week?",
-            "Upcoming renewals"
-          ],
-          'general': [
-            "Tell me more",
-            "Export this table",
-            "Show in different format",
-            "Compare with others",
-            "Summarize findings",
-            "What else should I know?"
-          ]
+        const followUpMap = {
+          'bundles_ending': ["Export to Excel", "Which have Netflix?", "Sort by price", "Show full details", "Compare pricing"],
+          'bundles_netflix': ["Which also have Disney+?", "Sort by price", "Which end this year?", "Which is cheapest with Netflix?"],
+          'bundles_price': ["Filter by network type", "Show only BB + Stream", "Which include streaming?", "Compare top 5"],
+          'products_category': ["Which category has most?", "Show products not in bundles", "Average price by category"],
+          'data_quality': ["Show specific errors", "How do I fix these?", "Export issues list", "Which are critical?"],
+          'bundle_lookup': ["Show all products in this bundle", "When does this expire?", "Compare with similar bundles"],
+          'default': ["Tell me more", "Show as table", "Export this", "Compare options", "What else should I know?"]
         };
-        
-        return followUps[lastQueryType] || followUps['general'];
+        return followUpMap[lastQueryType] || followUpMap['default'];
       };
 
       // Detect query type for follow-up suggestions
@@ -581,49 +341,31 @@
         const q = query.toLowerCase();
         if (q.includes('end') && (q.includes('year') || q.includes('month') || q.includes('expire'))) return 'bundles_ending';
         if (q.includes('netflix') || q.includes('disney') || q.includes('streaming')) return 'bundles_netflix';
-        if (q.includes('price') || q.includes('cheap') || q.includes('expensive') || q.includes('cost')) return 'pricing';
+        if (q.includes('price') || q.includes('cheap') || q.includes('expensive') || q.includes('cost')) return 'bundles_price';
         if (q.includes('category') || q.includes('categories')) return 'products_category';
-        if (q.includes('error') || q.includes('quality') || q.includes('missing') || q.includes('duplicate') || q.includes('validate')) return 'data_quality';
-        if (q.includes('config') || q.includes('docsis') || q.includes('fttp') || q.includes('network')) return 'configuration';
-        if (q.includes('show me bundle') || q.includes('find bundle') || q.includes('bundle id') || q.match(/\b(m50|m125|m250|m350|m500|gig)/)) return 'bundle_lookup';
-        if (q.includes('today') || q.includes('this week') || q.includes('stand') || q.includes('quick') || q.includes('summary')) return 'daily';
-        return 'general';
+        if (q.includes('error') || q.includes('quality') || q.includes('missing') || q.includes('duplicate')) return 'data_quality';
+        if (q.includes('config') || q.includes('docsis') || q.includes('fttp')) return 'bundle_lookup';
+        if (q.match(/bundle\s+\d+|show.*bundle|find.*bundle/)) return 'bundle_lookup';
+        return 'default';
       };
 
       // Get column-specific prompts based on actual data
       const getColumnSpecificPrompts = () => {
         const prompts = [];
-        
         if (bundles.length > 0) {
           const cols = Object.keys(bundles[0]);
-          
-          // Date columns
           cols.forEach(col => {
-            if (col.toLowerCase().includes('date') || col.toLowerCase().includes('end') || col.toLowerCase().includes('expir')) {
-              prompts.push(`Show bundles by ${col}`);
-              prompts.push(`Which bundles have ${col} this year?`);
-              prompts.push(`Sort bundles by ${col}`);
+            const c = col.toLowerCase();
+            if (c.includes('date') || c.includes('end') || c.includes('expir')) {
+              prompts.push(`Show bundles by ${col}`, `Which bundles have ${col} this year?`);
+            }
+            if (c.includes('price') || c.includes('cost')) {
+              prompts.push(`Sort bundles by ${col}`, `Find bundles with ${col} under £50`);
+            }
+            if (c.includes('type') || c.includes('category') || c.includes('network')) {
+              prompts.push(`Break down bundles by ${col}`, `Show unique values in ${col}`);
             }
           });
-          
-          // Price columns
-          cols.forEach(col => {
-            if (col.toLowerCase().includes('price') || col.toLowerCase().includes('cost')) {
-              prompts.push(`Show bundles sorted by ${col}`);
-              prompts.push(`Average ${col} across all bundles`);
-              prompts.push(`Find bundles with ${col} under £50`);
-            }
-          });
-          
-          // Category/Type columns
-          cols.forEach(col => {
-            if (col.toLowerCase().includes('type') || col.toLowerCase().includes('category') || col.toLowerCase().includes('network')) {
-              prompts.push(`Break down bundles by ${col}`);
-              prompts.push(`Show unique values in ${col}`);
-              prompts.push(`Count bundles per ${col}`);
-            }
-          });
-          
           // Name columns - look for specific products
           const sampleValues = bundles.slice(0, 20).map(b => Object.values(b).join(' ')).join(' ').toLowerCase();
           if (sampleValues.includes('netflix')) prompts.push('Show all bundles with Netflix');
@@ -673,32 +415,16 @@
         },
         // User-defined business rules
         businessRules: [
-          { id: 1, category: 'Products', rule: 'Product codes starting with P are core products (e.g., P106879 = M125 Fibre Broadband)' },
-          { id: 2, category: 'Products', rule: 'Product codes starting with D are discount codes applied to bundles' },
-          { id: 3, category: 'Products', rule: 'Product codes starting with A are add-on products that can be included' },
-          { id: 4, category: 'Products', rule: 'Product codes starting with S are SIM products (e.g., S2000040 = 40GB Plus SIM)' },
-          { id: 5, category: 'Bundles', rule: 'Bundles_RGU contains the core product codes that make up the bundle' },
-          { id: 6, category: 'Bundles', rule: 'Additional_bundle_codes contains supplementary product/discount codes' },
-          { id: 7, category: 'Bundles', rule: 'Included_Addon lists add-ons that come FREE with the bundle' },
-          { id: 8, category: 'Bundles', rule: 'Excluded_Addon lists add-ons that CANNOT be added to this bundle' },
-          { id: 9, category: 'Pricing', rule: 'Discounted_Monthly_Price_1 is the price for the first X months (Discounted_Length_1)' },
-          { id: 10, category: 'Pricing', rule: 'Discounted_Monthly_Price_2 is the price for the next period (Discounted_Length_2)' },
-          { id: 11, category: 'Pricing', rule: 'On_going_Monthly_Price is the standard price after promotional periods end' },
-          { id: 12, category: 'Network', rule: 'DOCSIS is standard cable broadband technology' },
-          { id: 13, category: 'Network', rule: 'XGS (XGS-PON) is fibre technology offering symmetric upload/download speeds' },
-          { id: 14, category: 'Network', rule: 'Alt_Network_BundleId links to the equivalent bundle on alternative network type' },
-          { id: 15, category: 'Bundle Types', rule: 'Volt bundles include a mobile SIM component' },
-          { id: 16, category: 'Bundle Types', rule: 'Dual bundles typically include Broadband + TV' },
-          { id: 17, category: 'Bundle Types', rule: 'Triple bundles include Broadband + TV + Phone' },
-          { id: 18, category: 'Bundle Types', rule: 'Stream/Flex bundles include streaming services' },
-          { id: 19, category: 'TV', rule: 'Mega TV is the base TV package' },
-          { id: 20, category: 'TV', rule: 'Sky Sports HD and Sky Cinema are premium TV add-ons' },
-          { id: 21, category: 'Tiers', rule: 'Tier (Classic/Plus) affects which SIM data allowances are included' },
-          { id: 22, category: 'TMI', rule: 'TMI columns (Broadband_TMI, Phone_TMI, TV_TMI, SIM_TMI) are internal tariff identifiers' }
+          { id: 1, category: 'Products', rule: 'P codes = core products, D = discounts, A = add-ons, S = SIMs' },
+          { id: 2, category: 'Bundles', rule: 'Bundles_RGU = core products, Additional_bundle_codes = supplementary codes' },
+          { id: 3, category: 'Bundles', rule: 'Included_Addon = FREE add-ons, Excluded_Addon = BLOCKED add-ons' },
+          { id: 4, category: 'Pricing', rule: 'Discounted_Monthly_Price_1/2 = promo prices for Discounted_Length_1/2 months, then On_going_Monthly_Price' },
+          { id: 5, category: 'Network', rule: 'DOCSIS = cable, XGS = fibre symmetric. Alt_Network_BundleId links equivalent bundles' },
+          { id: 6, category: 'Bundle Types', rule: 'Volt = +SIM, Dual = BB+TV, Triple = BB+TV+Phone, Stream/Flex = streaming' },
+          { id: 7, category: 'TV', rule: 'Mega TV = base package, Sky Sports/Cinema = premium add-ons' },
+          { id: 8, category: 'Other', rule: 'Tier (Classic/Plus) = SIM allowances, TMI columns = internal tariff IDs' }
         ],
-        // Custom notes added by user
         customNotes: [],
-        // Last analysis timestamp
         lastAnalyzed: null
       });
       const [impactSearchTerm, setImpactSearchTerm] = useState('');
@@ -1033,11 +759,7 @@
       const getBundlePriceBreakdown = (bundle) => {
         if (!bundle) return null;
         
-        const parsePrice = (val) => {
-          if (!val && val !== 0) return null;
-          const num = parseFloat(String(val).replace(/[^0-9.-]/g, ''));
-          return isNaN(num) ? null : num;
-        };
+        const parsePrice = (val) => val === null || val === undefined ? null : utils.parsePrice(val) || null;
         
         const breakdown = {
           bundleId: bundle.ID,
@@ -2098,42 +1820,8 @@ Return ONLY valid JSON:
         const now = new Date();
         const currentYear = now.getFullYear();
         
-        // Helper: Search all columns of a row for a term
-        const rowContains = (row, term) => {
-          const t = term.toLowerCase();
-          return Object.values(row).some(val => String(val).toLowerCase().includes(t));
-        };
-        
-        // Helper: Parse date from various formats
-        const parseDate = (dateStr) => {
-          if (!dateStr) return null;
-          const str = String(dateStr).trim();
-          
-          // Try DD/MM/YYYY
-          let match = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-          if (match) {
-            const [, day, month, year] = match;
-            return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-          }
-          
-          // Try YYYY-MM-DD
-          match = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
-          if (match) {
-            const [, year, month, day] = match;
-            return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-          }
-          
-          // Try parsing directly
-          const d = new Date(str);
-          return isNaN(d.getTime()) ? null : d;
-        };
-        
-        // Helper: Parse price
-        const parsePrice = (priceStr) => {
-          if (!priceStr) return 0;
-          const cleaned = String(priceStr).replace(/[^0-9.-]/g, '');
-          return parseFloat(cleaned) || 0;
-        };
+        // Use consolidated utils
+        const { rowContains, parseDate, parsePrice } = utils;
         
         // Helper: Get column by type
         const getCol = (data, ...keywords) => {
@@ -2405,21 +2093,8 @@ COLUMNS: ${bundleColumns.join(' | ')}`;
         const priceCol = cols.find(c => c.toLowerCase().includes('price') || c.toLowerCase().includes('cost'));
         const dateCol = cols.find(c => c.toLowerCase().includes('end') || c.toLowerCase().includes('expir') || c.toLowerCase().includes('date'));
         
-        // Helper functions
-        const rowContains = (row, term) => Object.values(row).some(v => String(v).toLowerCase().includes(term.toLowerCase()));
-        
-        const parseDate = (str) => {
-          if (!str) return null;
-          const s = String(str).trim();
-          let m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-          if (m) return new Date(parseInt(m[3]), parseInt(m[2])-1, parseInt(m[1]));
-          m = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
-          if (m) return new Date(parseInt(m[1]), parseInt(m[2])-1, parseInt(m[3]));
-          const d = new Date(s);
-          return isNaN(d.getTime()) ? null : d;
-        };
-        
-        const parsePrice = (p) => parseFloat(String(p || '0').replace(/[^0-9.-]/g, '')) || 0;
+        // Use consolidated utils
+        const { rowContains, parseDate, parsePrice } = utils;
         
         const formatTable = (data, columns) => {
           if (data.length === 0) return 'No results found.';
